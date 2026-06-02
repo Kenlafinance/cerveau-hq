@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CERVEAU · LOÏC DENYS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--page-bg:#0f1117;--card-bg:#151820;--cyan:#00d4ff;--border:rgba(0,212,255,.14);--text:#ffffff;--text-body:#b0b8c8;--text-dim:rgba(176,184,200,.5)}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Share Tech Mono','Courier New',monospace;color:var(--cyan)}
+
+#brain-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;display:block;cursor:grab}
+#brain-canvas.dragging{cursor:grabbing}
+
+#label-overlay{position:fixed;inset:0;z-index:5;pointer-events:none}
+.nd-label{position:absolute;display:flex;flex-direction:column;align-items:center;pointer-events:auto;transform:translate(-50%,-50%);transition:opacity .3s}
+.nd-label .bubble{border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;transition:transform .2s,box-shadow .2s}
+.nd-label:not(.center):hover .bubble{transform:scale(1.22)}
+.nd-label:not(.center){cursor:pointer}
+.nd-label .lbl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#fff;margin-top:7px;white-space:nowrap;text-align:center;text-shadow:0 0 8px #000,0 0 14px rgba(0,0,0,.9);pointer-events:none}
+.nd-label.center .lbl{font-family:'Orbitron',monospace;font-weight:700;font-size:12px;letter-spacing:.2em;color:#00d4ff;text-shadow:0 0 12px rgba(0,212,255,.9)}
+.nd-label.center .bubble{animation:center-pulse 2s ease-in-out infinite;cursor:pointer}
+@keyframes center-pulse{0%,100%{box-shadow:0 0 30px #00d4ff,0 0 60px #00d4ff,0 0 110px rgba(0,212,255,.45)}50%{box-shadow:0 0 50px #00d4ff,0 0 95px #00d4ff,0 0 170px rgba(0,212,255,.65)}}
+
+#scanlines{position:fixed;inset:0;z-index:10;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,212,255,.009) 3px,rgba(0,212,255,.009) 4px)}
+#vignette{position:fixed;inset:0;z-index:10;pointer-events:none;background:radial-gradient(ellipse at center,transparent 35%,rgba(0,0,8,.7) 100%)}
+
+#hdr{position:fixed;top:0;left:0;padding:22px 30px;z-index:15;pointer-events:none}
+#hdr-title{font-family:'Orbitron',monospace;font-weight:900;font-size:28px;letter-spacing:.3em;color:var(--cyan);text-shadow:0 0 18px rgba(0,212,255,.65),0 0 50px rgba(0,212,255,.25)}
+#hdr-sub{margin-top:5px;font-size:10px;letter-spacing:.42em;color:rgba(0,212,255,.35);text-transform:uppercase}
+#info-tr{position:fixed;top:22px;right:30px;z-index:15;text-align:right;font-size:10px;line-height:2;color:rgba(0,212,255,.22);letter-spacing:.18em;pointer-events:none}
+#info-tr .val{color:rgba(0,212,255,.5)}
+#gstatus{position:fixed;bottom:22px;left:30px;z-index:15;font-size:10px;color:rgba(0,212,255,.28);letter-spacing:.18em;pointer-events:none}
+
+#fade{position:fixed;inset:0;background:#000;z-index:200;opacity:0;pointer-events:none}
+
+#sidenav{position:fixed;left:0;top:0;width:192px;height:100%;background:rgba(8,9,15,.97);border-right:1px solid rgba(0,212,255,.1);z-index:110;display:none;flex-direction:column;backdrop-filter:blur(16px);overflow-y:auto}
+#sidenav.visible{display:flex}
+.sn-back{padding:18px 18px 14px;font-size:10px;letter-spacing:.2em;color:rgba(0,212,255,.5);cursor:pointer;border-bottom:1px solid rgba(0,212,255,.08);transition:color .2s;flex-shrink:0}
+.sn-back:hover{color:var(--cyan)}
+.sn-title{padding:14px 18px 8px;font-size:9px;letter-spacing:.4em;color:rgba(0,212,255,.25);text-transform:uppercase}
+.sn-item{display:flex;align-items:center;gap:9px;padding:9px 18px;cursor:pointer;transition:all .2s;font-size:10px;letter-spacing:.1em;color:rgba(255,255,255,.4);border-left:2px solid transparent}
+.sn-item:hover{color:rgba(255,255,255,.8);background:rgba(255,255,255,.03)}
+.sn-item.sn-active{color:#fff;border-left-color:var(--cyan);background:rgba(0,212,255,.05)}
+.sn-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+.page{position:fixed;inset:0;background:var(--page-bg);z-index:100;display:none;flex-direction:column;overflow-y:auto;opacity:0}
+.page-hdr{position:sticky;top:0;z-index:10;padding:14px 24px;background:rgba(12,13,20,.96);border-bottom:1px solid rgba(0,212,255,.08);backdrop-filter:blur(12px);display:flex;align-items:center;gap:14px;flex-shrink:0;margin-left:192px}
+.page-hdr::after{content:'';position:absolute;bottom:0;left:192px;right:0;height:1px;background:linear-gradient(90deg,var(--accent,#00d4ff),transparent);opacity:.35}
+.back-btn{font-size:10px;letter-spacing:.2em;color:rgba(0,212,255,.5);background:none;border:1px solid rgba(0,212,255,.22);padding:5px 11px;cursor:pointer;transition:all .2s;flex-shrink:0;font-family:'Share Tech Mono',monospace}
+.back-btn:hover{color:var(--cyan);border-color:var(--cyan)}
+.page-dot{width:30px;height:30px;border-radius:50%;flex-shrink:0}
+.page-title{font-family:'Orbitron',monospace;font-weight:900;font-size:18px;letter-spacing:.25em;color:var(--accent,var(--cyan));text-shadow:0 0 14px var(--accent,var(--cyan))}
+.page-sub{font-size:10px;letter-spacing:.22em;color:rgba(176,184,200,.4);margin-top:2px}
+.page-clock{margin-left:auto;font-size:10px;color:rgba(0,212,255,.3);letter-spacing:.15em;font-variant-numeric:tabular-nums}
+.page-body{flex:1;padding:20px 24px;display:grid;gap:16px;margin-left:192px}
+
+.card{border:1px solid rgba(0,212,255,.1);background:var(--card-bg);padding:16px;position:relative}
+.card::before{content:'';position:absolute;top:0;left:0;width:2px;height:100%;background:var(--accent,var(--cyan));opacity:.4}
+.sec{font-size:9px;letter-spacing:.38em;color:rgba(0,212,255,.3);text-transform:uppercase;margin-bottom:11px}
+.status-ok{color:#00ff88}.status-warn{color:#ffd700}.status-alert{color:#ff69b4}.status-dim{color:var(--text-dim)}
+.tag{padding:3px 9px;border:1px solid rgba(0,212,255,.22);font-size:10px;letter-spacing:.1em;color:var(--cyan);background:rgba(0,212,255,.04)}
+
+#p-atlas{--accent:#ff4444}
+.atlas-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.atlas-full{grid-column:1/-1}
+.price-tbl{width:100%;border-collapse:collapse}
+.price-tbl th{font-size:9px;letter-spacing:.25em;color:rgba(255,68,68,.4);padding:0 8px 10px 0;text-align:left;font-weight:normal}
+.price-tbl td{padding:9px 8px 9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.price-tbl tr:last-child td{border-bottom:none}
+.psym{font-family:'Orbitron',monospace;font-weight:700;font-size:12px;letter-spacing:.1em;color:rgba(255,255,255,.9);width:85px}
+.pval{color:#fff;font-variant-numeric:tabular-nums;width:150px;font-size:17px;font-family:'Orbitron',monospace;font-weight:700}
+.pchg{font-size:12px;font-variant-numeric:tabular-nums;width:100px;font-weight:bold}
+.pup{color:#00ff88}.pdn{color:#ff4444}
+.pbar{width:55px;height:3px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;margin-top:2px}
+.pbar-f{height:100%;border-radius:2px;transition:width .8s}
+.kz-list{display:flex;flex-direction:column;gap:8px}
+.kz-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.015);transition:all .5s}
+.kz-item.kz-open{border-color:rgba(0,255,136,.3);background:rgba(0,255,136,.05)}
+.kz-pulse{width:10px;height:10px;border-radius:50%;flex-shrink:0;background:rgba(255,68,68,.6)}
+.kz-item.kz-open .kz-pulse{background:#00ff88;box-shadow:0 0 8px #00ff88;animation:kz-blink 1.4s ease-in-out infinite}
+@keyframes kz-blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+.kz-name{font-size:12px;letter-spacing:.1em;color:var(--text-body);flex:1}
+.kz-hrs{font-size:9px;color:rgba(0,212,255,.35)}
+.kz-lbl{font-size:12px;letter-spacing:.12em;font-weight:bold}
+.kz-item.kz-open .kz-lbl{color:#00ff88}.kz-item:not(.kz-open) .kz-lbl{color:rgba(255,68,68,.65)}
+.chk-list{display:flex;flex-direction:column;gap:8px}
+.chk{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text-body);cursor:pointer;transition:color .2s;letter-spacing:.04em;padding:3px 0}
+.chk:hover{color:#fff}.chk.checked{color:var(--cyan)}
+.chkbox{width:14px;height:14px;border:1px solid rgba(0,212,255,.35);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.chk.checked .chkbox{border-color:var(--cyan);background:rgba(0,212,255,.15)}
+.chkmark{font-size:9px;color:var(--cyan);display:none}.chk.checked .chkmark{display:block}
+.dd-list{display:flex;flex-direction:column;gap:5px}
+.dd-row{display:flex;align-items:center;gap:10px;padding:7px 12px;border:1px solid rgba(255,255,255,.05);transition:all .3s}
+.dd-row.dd-active{border-color:rgba(255,68,68,.3);background:rgba(255,68,68,.05)}
+.dd-lbl{font-size:10px;color:var(--text-dim);width:32px}.dd-row.dd-active .dd-lbl{color:#ff4444}
+.dd-pct{font-size:10px;color:rgba(255,68,68,.55);width:40px}
+.dd-bar{flex:1;height:3px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden}
+.dd-bar-f{height:100%;background:#ff4444;border-radius:2px}
+.dd-act{font-size:9px;color:var(--text-dim);letter-spacing:.08em}.dd-row.dd-active .dd-act{color:rgba(255,68,68,.6)}
+.wl-tbl{width:100%;border-collapse:collapse}
+.wl-tbl th{font-size:9px;letter-spacing:.28em;color:rgba(255,68,68,.35);padding:0 6px 8px 0;text-align:left;font-weight:normal}
+.wl-tbl td{padding:7px 6px 7px 0;font-size:11px;color:var(--text-body);border-bottom:1px solid rgba(255,255,255,.05)}
+.wl-tbl td:first-child{color:#fff;font-family:'Orbitron',monospace;font-size:10px}
+.pf{color:#00d4ff;font-weight:bold}
+.badge-ok{display:inline-block;padding:1px 7px;border:1px solid rgba(0,255,136,.3);color:#00ff88;font-size:9px;letter-spacing:.1em}
+.accounts{display:flex;gap:10px;flex-wrap:wrap}
+.acc{flex:1;min-width:120px;border:1px solid rgba(0,212,255,.12);background:rgba(0,212,255,.03);padding:14px 16px}
+.acc-name{font-size:9px;letter-spacing:.2em;color:rgba(0,212,255,.4);margin-bottom:8px}
+.acc-val{font-family:'Orbitron',monospace;font-weight:700;font-size:19px;color:#fff}
+.acc-val.pos{color:#00ff88;text-shadow:0 0 10px rgba(0,255,136,.3)}
+.acc-val.pending{font-size:14px;color:rgba(255,215,0,.7)}
+.acc-status{font-size:9px;letter-spacing:.12em;color:rgba(0,212,255,.3);margin-top:5px}
+
+#p-forge{--accent:#ff8c00}
+.forge-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.forge-full{grid-column:1/-1}
+.arc-wrap{text-align:center;padding:20px 16px}
+.arc-val{font-family:'Orbitron',monospace;font-weight:900;font-size:32px;color:#ff8c00;text-shadow:0 0 18px rgba(255,140,0,.4)}
+.arc-total{font-size:11px;color:rgba(255,140,0,.4);letter-spacing:.2em;margin-top:2px}
+.forge-pub{font-size:10px;letter-spacing:.25em;color:var(--text-dim);margin-top:10px}
+.forge-pub span{color:#ff8c00}
+.ep-tbl{width:100%;border-collapse:collapse}
+.ep-tbl th{font-size:9px;letter-spacing:.28em;color:rgba(255,140,0,.35);padding:0 6px 8px 0;text-align:left;font-weight:normal}
+.ep-tbl td{padding:6px 6px 6px 0;font-size:11px;color:var(--text-body);border-bottom:1px solid rgba(255,255,255,.04)}
+.ep-tbl td:first-child{color:rgba(255,140,0,.7);font-family:'Orbitron',monospace;font-size:10px;width:44px}
+.ep-badge{display:inline-block;padding:1px 7px;font-size:9px;letter-spacing:.1em;border:1px solid}
+.ep-planned{border-color:rgba(255,140,0,.3);color:rgba(255,140,0,.6)}
+.ep-recorded{border-color:rgba(0,212,255,.3);color:rgba(0,212,255,.7)}
+.ep-edited{border-color:rgba(0,255,136,.3);color:rgba(0,255,136,.7)}
+.ep-pub{border-color:rgba(0,255,136,.5);color:#00ff88;background:rgba(0,255,136,.06)}
+.stack-row{display:flex;gap:8px;flex-wrap:wrap}
+.stack-b{padding:5px 12px;border:1px solid rgba(255,140,0,.22);color:rgba(255,140,0,.7);font-size:10px;letter-spacing:.14em;background:rgba(255,140,0,.03)}
+.workflow{font-size:11px;color:var(--text-dim);line-height:2.2;letter-spacing:.05em;margin-top:10px}
+
+#p-hermes{--accent:#ffd700}
+.hermes-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.hermes-full{grid-column:1/-1}
+.perf-hero{text-align:center;padding:20px 16px}
+.perf-big{font-family:'Orbitron',monospace;font-weight:900;font-size:52px;color:#ffd700;text-shadow:0 0 30px rgba(255,215,0,.35);line-height:1}
+.perf-sub{font-size:10px;letter-spacing:.3em;color:rgba(255,215,0,.35);margin-top:6px}
+.pos-tbl{width:100%;border-collapse:collapse}
+.pos-tbl th{font-size:9px;letter-spacing:.28em;color:rgba(255,215,0,.35);padding:0 6px 8px 0;text-align:left;font-weight:normal}
+.pos-tbl td{padding:8px 6px 8px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,.04)}
+.pos-tbl td:first-child{color:#fff;font-family:'Orbitron',monospace;font-size:11px}
+.gain-p{color:#00ff88}.gain-n{color:#ff4444}
+.contrib-center{text-align:center;padding:14px 8px}
+.contrib-val{font-family:'Orbitron',monospace;font-weight:700;font-size:28px;color:#ffd700}
+.contrib-lbl{font-size:10px;letter-spacing:.22em;color:rgba(255,215,0,.35);margin-top:4px}
+.distrib-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.distrib-k{font-size:11px;color:var(--text-body)}.distrib-v{font-size:13px;color:#ffd700;font-family:'Orbitron',monospace;font-weight:700}
+.pea-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.pea-k{font-size:11px;color:var(--text-body)}.pea-v{font-size:12px;color:#ffd700}
+.pea-prog{height:4px;background:rgba(255,215,0,.1);border-radius:2px;overflow:hidden;margin:8px 0}
+.pea-prog-f{height:100%;background:#ffd700;border-radius:2px;box-shadow:0 0 6px rgba(255,215,0,.4)}
+
+#p-drintegra{--accent:#ff69b4}
+.integra-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.integra-full{grid-column:1/-1}
+.alert-banner{border:1px solid rgba(255,105,180,.35);background:rgba(255,105,180,.06);padding:12px 16px;display:flex;align-items:center;gap:12px}
+.alert-icon{font-size:18px;flex-shrink:0}
+.alert-txt{font-size:11px;color:rgba(255,105,180,.8);letter-spacing:.05em;line-height:1.7}
+.alert-txt strong{color:#ff69b4}
+.profile-card{border:1px solid rgba(255,105,180,.12);background:rgba(255,105,180,.025);padding:14px;position:relative}
+.profile-card::before{content:'';position:absolute;top:0;left:0;width:2px;height:100%;background:#ff69b4;opacity:.4}
+.p-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',monospace;font-weight:900;font-size:12px;margin-bottom:9px}
+.p-name{font-family:'Orbitron',monospace;font-weight:700;font-size:13px;color:#fff;letter-spacing:.12em;margin-bottom:3px}
+.p-role{font-size:9px;letter-spacing:.18em;color:rgba(255,105,180,.45);margin-bottom:10px}
+.m-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.m-k{font-size:10px;color:var(--text-dim)}.m-v{font-size:10px;letter-spacing:.06em}
+
+#p-titan{--accent:#00ff88}
+.titan-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.titan-full{grid-column:1/-1}
+.wt-track{position:relative;height:56px;background:rgba(0,255,136,.03);border:1px solid rgba(0,255,136,.1);border-radius:3px;overflow:hidden;margin:10px 0}
+.wt-fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,rgba(0,255,136,.14),rgba(0,255,136,.05));border-right:2px solid #00ff88;box-shadow:4px 0 12px rgba(0,255,136,.3);transition:width 1.6s ease}
+.wt-cur{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-family:'Orbitron',monospace;font-weight:900;font-size:20px;color:#00ff88;text-shadow:0 0 14px rgba(0,255,136,.4)}
+.wt-labels{display:flex;justify-content:space-between;font-size:10px;color:rgba(0,255,136,.35);letter-spacing:.1em}
+.wt-stats{display:flex;gap:20px;margin-top:10px}
+.wt-stat-k{font-size:10px;color:rgba(0,255,136,.35)}.wt-stat-v{color:#00ff88;margin-left:6px}
+.paliers{display:flex;flex-direction:column;gap:7px}
+.palier{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid rgba(0,255,136,.08);background:rgba(0,255,136,.01);transition:all .3s}
+.palier.current{border-color:#00ff88;background:rgba(0,255,136,.08)}
+.pal-num{font-family:'Orbitron',monospace;font-weight:700;font-size:17px;color:rgba(0,255,136,.25);width:55px}
+.palier.current .pal-num{color:#00ff88;text-shadow:0 0 10px rgba(0,255,136,.35)}
+.pal-lbl{font-size:10px;color:var(--text-dim);letter-spacing:.1em}
+.palier.current .pal-lbl{color:rgba(0,255,136,.65)}
+.pal-ico{margin-left:auto;font-size:14px;color:rgba(0,255,136,.3)}.palier.current .pal-ico{color:#00ff88}
+.supps{display:flex;flex-wrap:wrap;gap:7px}
+.supp{padding:5px 11px;border:1px solid rgba(0,255,136,.18);color:rgba(0,255,136,.65);font-size:10px;letter-spacing:.12em;background:rgba(0,255,136,.03)}
+.proto{font-size:11px;color:var(--text-dim);line-height:2.2;letter-spacing:.05em;margin-top:10px}
+
+.simple-body{display:flex;flex-direction:column;gap:18px;max-width:560px;margin:0 auto;width:100%;padding-top:4px}
+.conns-flex{display:flex;flex-wrap:wrap;gap:7px}
+.conn-card{display:flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:all .2s;font-size:11px;color:var(--text-body);letter-spacing:.07em}
+.conn-card:hover{border-color:rgba(0,212,255,.35);color:#fff}
+.conn-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.wip{padding:22px;border:1px dashed rgba(0,212,255,.12);text-align:center;font-size:11px;letter-spacing:.3em;color:rgba(0,212,255,.2);margin-top:6px}
+
+/* ═══════════════════════════════════════════
+   LOÏC DENYS · NŒUD CENTRAL
+═══════════════════════════════════════════ */
+#p-loic-denys{--accent:#00d4ff}
+.loic-body{flex:1;padding:20px 24px;margin-left:192px;display:flex;flex-direction:column;gap:16px}
+.loic-hero{border:1px solid rgba(0,212,255,.16);background:rgba(5,7,15,.84);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);padding:36px 44px;position:relative;overflow:hidden;text-align:center}
+.loic-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 0%,rgba(0,212,255,.55) 30%,#00d4ff 50%,rgba(0,212,255,.55) 70%,transparent 100%)}
+.loic-hero::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(0,212,255,.07) 0%,transparent 70%);pointer-events:none}
+.loic-eyebrow{font-size:9px;letter-spacing:.55em;color:rgba(0,212,255,.32);text-transform:uppercase;margin-bottom:14px}
+.loic-name{font-family:'Orbitron',monospace;font-weight:900;font-size:52px;letter-spacing:.28em;color:#00d4ff;text-shadow:0 0 40px rgba(0,212,255,.5),0 0 100px rgba(0,212,255,.18),0 0 2px rgba(0,212,255,.95);line-height:1;position:relative;z-index:1;display:inline-block}
+.loic-role-txt{font-size:10px;letter-spacing:.44em;color:rgba(0,212,255,.4);text-transform:uppercase;margin-top:10px;position:relative;z-index:1}
+.loic-hero-stats{display:flex;justify-content:center;margin-top:26px;border-top:1px solid rgba(0,212,255,.08);padding-top:20px;gap:0}
+.lh-stat{flex:1;text-align:center;border-right:1px solid rgba(0,212,255,.07);padding:0 6px}
+.lh-stat:last-child{border-right:none}
+.lh-val{font-family:'Orbitron',monospace;font-weight:900;font-size:22px;color:#00d4ff;text-shadow:0 0 14px rgba(0,212,255,.3)}
+.lh-lbl{font-size:8px;letter-spacing:.28em;color:rgba(0,212,255,.28);margin-top:5px;text-transform:uppercase}
+.ls-hdr{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.ls-title{font-size:9px;letter-spacing:.42em;color:rgba(0,212,255,.38);text-transform:uppercase}
+.ls-count{font-size:9px;color:rgba(0,212,255,.18);letter-spacing:.12em}
+.ls-line{flex:1;height:1px;background:linear-gradient(90deg,rgba(0,212,255,.1),transparent)}
+.agents-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(162px,1fr));gap:8px}
+.agent-card{border:1px solid rgba(255,255,255,.06);background:rgba(8,10,20,.68);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);padding:13px 14px 12px;cursor:pointer;transition:background .2s,transform .2s,border-color .2s;position:relative;overflow:hidden}
+.agent-card-glow{position:absolute;top:0;left:0;right:0;height:1px;opacity:.85}
+.agent-card-num{font-size:8px;letter-spacing:.18em;color:rgba(255,255,255,.12);position:absolute;top:9px;right:11px;font-family:'Orbitron',monospace}
+.agent-card:hover{background:rgba(255,255,255,.04);transform:translateY(-2px)}
+.agent-card-name{font-family:'Orbitron',monospace;font-weight:700;font-size:10px;letter-spacing:.14em;margin-bottom:4px;margin-top:4px}
+.agent-card-role{font-size:9px;color:rgba(176,184,200,.4);letter-spacing:.06em;line-height:1.55}
+.agent-card-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:7px}
+.agent-card-tag{font-size:8px;padding:1px 5px;border:1px solid rgba(255,255,255,.06);color:rgba(176,184,200,.28);letter-spacing:.05em}
+.loic-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.obj-list{display:flex;flex-direction:column;gap:7px}
+.obj-item{border:1px solid rgba(0,212,255,.08);background:rgba(5,7,15,.6);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:11px 14px;position:relative}
+.obj-item::before{content:'';position:absolute;top:0;left:0;width:2px;height:100%;background:var(--obj-c,#00d4ff);opacity:.45}
+.obj-n{font-size:8px;letter-spacing:.18em;color:rgba(0,212,255,.22);font-family:'Orbitron',monospace;margin-bottom:3px}
+.obj-t{font-size:10px;letter-spacing:.1em;color:#fff}
+.obj-s{font-size:9px;color:rgba(176,184,200,.38);letter-spacing:.06em;line-height:1.5;margin-top:2px}
+.obj-bar{height:2px;background:rgba(0,212,255,.07);border-radius:2px;overflow:hidden;margin-top:9px}
+.obj-bar-f{height:100%;border-radius:2px;width:0;transition:width 1.4s cubic-bezier(.22,.61,.36,1)}
+.loic-right{display:flex;flex-direction:column;gap:12px}
+.gl-card{border:1px solid rgba(0,212,255,.1);background:rgba(5,7,15,.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:15px;position:relative}
+.gl-card::before{content:'';position:absolute;top:0;left:0;width:2px;height:100%;background:#00d4ff;opacity:.3}
+.stack-wrap{display:flex;flex-wrap:wrap;gap:6px}
+.s-chip{padding:5px 12px;border:1px solid rgba(0,212,255,.16);background:rgba(0,212,255,.025);font-size:9px;letter-spacing:.14em;color:rgba(0,212,255,.68);transition:all .18s;cursor:default}
+.s-chip:hover{border-color:rgba(0,212,255,.44);color:#00d4ff;background:rgba(0,212,255,.07)}
+.net-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.net-item{border:1px solid rgba(0,212,255,.08);background:rgba(0,212,255,.015);padding:11px;text-align:center}
+.net-val{font-family:'Orbitron',monospace;font-weight:900;font-size:20px;color:#00d4ff;text-shadow:0 0 10px rgba(0,212,255,.26)}
+.net-lbl{font-size:8px;letter-spacing:.24em;color:rgba(0,212,255,.27);margin-top:4px}
+.sys-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(0,212,255,.05)}
+.sys-row:last-child{border-bottom:none}
+.sys-k{font-size:9px;color:rgba(176,184,200,.42);letter-spacing:.08em}
+.sys-v{font-size:9px;letter-spacing:.1em}
+</style>
+</head>
+<body>
+
+<canvas id="brain-canvas"></canvas>
+<div id="label-overlay"></div>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+
+<div id="hdr">
+  <div id="hdr-title">CERVEAU HQ</div>
+  <div id="hdr-sub">VAULT NEURONAL · SYSTÈME ACTIF</div>
+</div>
+<div id="info-tr">
+  <div><span class="val">13</span> PROJETS</div>
+  <div><span class="val">22</span> CONNEXIONS</div>
+  <div><span class="val">◆</span> ACTIF</div>
+</div>
+<div id="gstatus">DRAG = ROTATION · SCROLL = ZOOM · CLIC = PROJET</div>
+
+<div id="sidenav">
+  <div class="sn-back" onclick="goToGraph()">← CERVEAU</div>
+  <div class="sn-title">PROJETS</div>
+  <div id="sn-items"></div>
+</div>
+
+<!-- ATLAS -->
+<div id="p-atlas" class="page">
+  <div class="page-hdr">
+    <button class="back-btn" onclick="goToGraph()">← CERVEAU</button>
+    <div class="page-dot" style="background:#ff4444;box-shadow:0 0 12px #ff4444"></div>
+    <div><div class="page-title">ATLAS</div><div class="page-sub">CARTOGRAPHIE STRATÉGIQUE · TRADING</div></div>
+    <div class="page-clock" id="atlas-clock"></div>
+  </div>
+  <div class="page-body">
+    <div class="atlas-grid">
+      <div class="atlas-full card"><div class="sec">PRIX EN DIRECT</div><table class="price-tbl"><thead><tr><th>SYMBOLE</th><th>PRIX</th><th>VARIATION</th><th>TENDANCE</th></tr></thead><tbody id="price-tbody"></tbody></table></div>
+      <div class="card"><div class="sec">KILL ZONES · UTC</div><div class="kz-list">
+        <div class="kz-item" id="kz-asian"><div class="kz-pulse"></div><div><div class="kz-name">ASIA</div><div class="kz-hrs">22:00 — 02:00 UTC</div></div><div class="kz-lbl" id="kz-asian-lbl">FERMÉ</div></div>
+        <div class="kz-item" id="kz-london"><div class="kz-pulse"></div><div><div class="kz-name">LONDON</div><div class="kz-hrs">07:00 — 11:00 UTC</div></div><div class="kz-lbl" id="kz-london-lbl">FERMÉ</div></div>
+        <div class="kz-item" id="kz-ny"><div class="kz-pulse"></div><div><div class="kz-name">NEW YORK</div><div class="kz-hrs">12:00 — 16:00 UTC</div></div><div class="kz-lbl" id="kz-ny-lbl">FERMÉ</div></div>
+      </div></div>
+      <div class="card"><div class="sec">CHECKLIST SMC · 7 CRITÈRES</div><div class="chk-list">
+        <div class="chk" onclick="toggleChk(this)"><div class="chkbox"><span class="chkmark">✓</span></div><span>Structure marché (BOS / ChoCH)</span></div>
+        <div class="chk" onclick="toggleChk(this)"><div class="chkbox"><span class="chkmark">✓</span></div><span>Zone HTF identifiée</span></div>
+        <div class="chk" onclick="toggleChk(this)"><div class="chkbox"><span class="chkmark">✓</span></div><span>Liquidité balayée</span></div>
+        <div class="chk" onclick="toggleChk(this)"><div class="chkbox"><span class="chkmark">✓</span></div><span>Flux d'ordres confirmé</span></div>
+        <div class="chk" onclick="toggleChk(this)"><div class="chkbox"><span class="chkmark">✓</span></div><span>FVG / Order Block identifié</span></div>
+        <div class="chk" onclick="toggleChk(this)"><div class="chkbox"><span class="chkmark">✓</span></div><span>RR ≥ 3:1 calculé</span></div>
+        <div class="chk" onclick="toggleChk(this)"><div class="chkbox"><span class="chkmark">✓</span></div><span>Kill Zone active</span></div>
+      </div></div>
+      <div class="atlas-full card"><div class="sec">DRAWDOWN MANAGEMENT</div><div class="dd-list">
+        <div class="dd-row dd-active"><span class="dd-lbl">DD1</span><span class="dd-pct">−2%</span><div class="dd-bar"><div class="dd-bar-f" style="width:20%"></div></div><span class="dd-act">PAUSE 1H</span></div>
+        <div class="dd-row"><span class="dd-lbl">DD2</span><span class="dd-pct">−4%</span><div class="dd-bar"><div class="dd-bar-f" style="width:40%"></div></div><span class="dd-act">STOP JOURNÉE</span></div>
+        <div class="dd-row"><span class="dd-lbl">DD3</span><span class="dd-pct">−6%</span><div class="dd-bar"><div class="dd-bar-f" style="width:60%"></div></div><span class="dd-act">PAUSE 3 JOURS</span></div>
+        <div class="dd-row"><span class="dd-lbl">DD4</span><span class="dd-pct">−8%</span><div class="dd-bar"><div class="dd-bar-f" style="width:80%"></div></div><span class="dd-act">PAUSE 1 SEMAINE</span></div>
+        <div class="dd-row"><span class="dd-lbl">DD5</span><span class="dd-pct">−10%</span><div class="dd-bar"><div class="dd-bar-f" style="width:100%"></div></div><span class="dd-act">RESET COMPTE</span></div>
+      </div></div>
+      <div class="card"><div class="sec">WHITELIST 7 ACTIFS</div><table class="wl-tbl"><thead><tr><th>ACTIF</th><th>TYPE</th><th>PF</th><th>STATUT</th></tr></thead><tbody>
+        <tr><td>US30</td><td class="status-dim">Index</td><td class="pf">1.85</td><td><span class="badge-ok">ACTIF</span></td></tr>
+        <tr><td>EURUSD</td><td class="status-dim">Forex</td><td class="pf">2.10</td><td><span class="badge-ok">ACTIF</span></td></tr>
+        <tr><td>GBPUSD</td><td class="status-dim">Forex</td><td class="pf">1.76</td><td><span class="badge-ok">ACTIF</span></td></tr>
+        <tr><td>EURJPY</td><td class="status-dim">Forex</td><td class="pf">2.34</td><td><span class="badge-ok">ACTIF</span></td></tr>
+        <tr><td>BTCUSD</td><td class="status-dim">Crypto</td><td class="pf">1.92</td><td><span class="badge-ok">ACTIF</span></td></tr>
+        <tr><td>SPX500</td><td class="status-dim">Index</td><td class="pf">1.65</td><td><span class="badge-ok">ACTIF</span></td></tr>
+        <tr><td>NZDUSD</td><td class="status-dim">Forex</td><td class="pf">1.48</td><td><span class="badge-ok">ACTIF</span></td></tr>
+      </tbody></table></div>
+      <div class="card"><div class="sec">COMPTES ACTIFS</div><div class="accounts">
+        <div class="acc"><div class="acc-name">FUSION</div><div class="acc-val">291.79€</div><div class="acc-status">PROP FIRM · ACTIF</div></div>
+        <div class="acc"><div class="acc-name">IBKR CTO</div><div class="acc-val pos">+36.23%</div><div class="acc-status">BOURSE · ACTIF</div></div>
+        <div class="acc"><div class="acc-name">PEA JUNE</div><div class="acc-val pending">EN COURS</div><div class="acc-status">PEA · SETUP</div></div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<!-- FORGE -->
+<div id="p-forge" class="page">
+  <div class="page-hdr">
+    <button class="back-btn" onclick="goToGraph()">← CERVEAU</button>
+    <div class="page-dot" style="background:#ff8c00;box-shadow:0 0 12px #ff8c00"></div>
+    <div><div class="page-title">FORGE</div><div class="page-sub">CRÉATION CONTENU · PODCAST</div></div>
+  </div>
+  <div class="page-body">
+    <div class="forge-grid">
+      <div class="forge-full card arc-wrap">
+        <svg width="150" height="150" viewBox="0 0 150 150" style="display:block;margin:0 auto 14px">
+          <circle cx="75" cy="75" r="62" fill="none" stroke="rgba(255,140,0,.1)" stroke-width="7"/>
+          <circle cx="75" cy="75" r="62" fill="none" stroke="#ff8c00" stroke-width="7" stroke-linecap="round" stroke-dasharray="390" stroke-dashoffset="352" style="transform-origin:center;transform:rotate(-90deg);filter:drop-shadow(0 0 5px #ff8c00)"/>
+        </svg>
+        <div class="arc-val">29</div><div class="arc-total">/ 300 ÉPISODES</div>
+        <div class="forge-pub">PUBLICATION · <span>20H00</span> · CHAQUE SOIR</div>
+      </div>
+      <div class="card"><div class="sec">PLANNING EP30 → EP40</div><table class="ep-tbl"><thead><tr><th>EP</th><th>SUJET</th><th>STATUT</th></tr></thead><tbody>
+        <tr><td>EP30</td><td>Mindset investisseur</td><td><span class="ep-badge ep-recorded">ENREGISTRÉ</span></td></tr>
+        <tr><td>EP31</td><td>SMC — les bases</td><td><span class="ep-badge ep-edited">ÉDITÉ</span></td></tr>
+        <tr><td>EP32</td><td>Portefeuille CTO</td><td><span class="ep-badge ep-planned">PLANIFIÉ</span></td></tr>
+        <tr><td>EP33</td><td>Biohacking sommeil</td><td><span class="ep-badge ep-planned">PLANIFIÉ</span></td></tr>
+        <tr><td>EP34</td><td>IA & productivité</td><td><span class="ep-badge ep-planned">PLANIFIÉ</span></td></tr>
+        <tr><td>EP35</td><td>Drawdown management</td><td><span class="ep-badge ep-planned">PLANIFIÉ</span></td></tr>
+        <tr><td>EP36</td><td>PEA guide complet</td><td><span class="ep-badge ep-planned">PLANIFIÉ</span></td></tr>
+        <tr><td>EP37</td><td>Kill Zones trading</td><td><span class="ep-badge ep-planned">PLANIFIÉ</span></td></tr>
+        <tr><td>EP38</td><td>Perte de poids méth.</td><td><span class="ep-badge ep-planned">PLANIFIÉ</span></td></tr>
+        <tr><td>EP39</td><td>Vision 2026</td><td><span class="ep-badge ep-planned">PLANIFIÉ</span></td></tr>
+        <tr><td>EP40</td><td>Bilan mi-parcours</td><td><span class="ep-badge ep-planned">PLANIFIÉ</span></td></tr>
+      </tbody></table></div>
+      <div class="card" style="align-self:start"><div class="sec">STACK TECHNIQUE</div>
+        <div class="stack-row"><div class="stack-b">🎙 ELEVENLABS</div><div class="stack-b">🎬 CAPCUT</div><div class="stack-b">🎨 CANVA</div></div>
+        <div class="workflow">Script → ElevenLabs (voix IA)<br>CapCut (montage + sous-titres)<br>Canva (thumbnail + visuel)<br>→ Publication 20H00</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HERMÈS -->
+<div id="p-hermes" class="page">
+  <div class="page-hdr">
+    <button class="back-btn" onclick="goToGraph()">← CERVEAU</button>
+    <div class="page-dot" style="background:#ffd700;box-shadow:0 0 12px #ffd700"></div>
+    <div><div class="page-title">HERMÈS</div><div class="page-sub">PORTEFEUILLE · INVESTISSEMENT</div></div>
+  </div>
+  <div class="page-body">
+    <div class="hermes-grid">
+      <div class="hermes-full card perf-hero"><div class="sec">PERFORMANCE CTO IBKR</div><div class="perf-big">+36.23%</div><div class="perf-sub">RENDEMENT ANNUALISÉ · COMPTE TITRES ORDINAIRE</div></div>
+      <div class="card"><div class="sec">LIGNES ACTIVES</div><table class="pos-tbl"><thead><tr><th>TICKER</th><th>NOM</th><th>GAIN</th><th>STATUT</th></tr></thead><tbody>
+        <tr><td>NVDA</td><td class="status-dim">NVIDIA Corp.</td><td class="gain-p">+94.2%</td><td><span class="badge-ok">HOLD</span></td></tr>
+        <tr><td>TSLA</td><td class="status-dim">Tesla Inc.</td><td class="gain-p">+28.7%</td><td><span class="badge-ok">HOLD</span></td></tr>
+        <tr><td>DLR</td><td class="status-dim">Digital Realty</td><td class="gain-p">+12.3%</td><td><span class="badge-ok">HOLD</span></td></tr>
+        <tr><td>AEP</td><td class="status-dim">Amer. Electric</td><td class="gain-n">−4.1%</td><td><span class="badge-ok" style="border-color:rgba(255,215,0,.3);color:rgba(255,215,0,.8)">WATCH</span></td></tr>
+      </tbody></table></div>
+      <div class="card"><div class="sec">PLAN MENSUEL · 300€ DCA</div>
+        <div class="contrib-center"><div class="contrib-val">300€</div><div class="contrib-lbl">PAR MOIS · DCA AUTOMATIQUE</div></div>
+        <div style="margin-top:12px;border-top:1px solid rgba(255,215,0,.08);padding-top:12px">
+          <div class="sec" style="margin-top:0">RÉPARTITION</div>
+          <div class="distrib-row"><span class="distrib-k">NVDA</span><span class="distrib-v">120€</span></div>
+          <div class="distrib-row"><span class="distrib-k">TSLA</span><span class="distrib-v">80€</span></div>
+          <div class="distrib-row"><span class="distrib-k">DLR</span><span class="distrib-v">60€</span></div>
+          <div class="distrib-row"><span class="distrib-k">AEP</span><span class="distrib-v">40€</span></div>
+        </div>
+      </div>
+      <div class="hermes-full card"><div class="sec">PEA JUNE · PROJECTION 22 000€</div>
+        <div class="pea-prog"><div class="pea-prog-f" style="width:35%"></div></div>
+        <div class="pea-row"><span class="pea-k">Objectif 2026</span><span class="pea-v">22 000€</span></div>
+        <div class="pea-row"><span class="pea-k">Valeur actuelle estimée</span><span class="pea-v" style="color:rgba(255,215,0,.55)">~7 700€</span></div>
+        <div class="pea-row"><span class="pea-k">Contribution mensuelle</span><span class="pea-v" style="color:rgba(255,215,0,.55)">300€</span></div>
+        <div class="pea-row"><span class="pea-k">Horizon</span><span class="pea-v" style="color:rgba(255,215,0,.55)">LONG TERME</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DR.INTEGRA -->
+<div id="p-drintegra" class="page">
+  <div class="page-hdr">
+    <button class="back-btn" onclick="goToGraph()">← CERVEAU</button>
+    <div class="page-dot" style="background:#ff69b4;box-shadow:0 0 12px #ff69b4"></div>
+    <div><div class="page-title">DR.INTEGRA</div><div class="page-sub">SANTÉ FAMILLE · MONITORING</div></div>
+  </div>
+  <div class="page-body">
+    <div class="integra-grid">
+      <div class="integra-full alert-banner"><div class="alert-icon">⚠</div><div class="alert-txt"><strong>ALERTE URGENCE — CAMILLE</strong><br>Suivi médical prioritaire actif. Protocole d'urgence en cours.</div></div>
+      <div class="profile-card">
+        <div class="p-avatar" style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);color:#00d4ff">LD</div>
+        <div class="p-name">LOÏC</div><div class="p-role">CHEF DE FAMILLE</div>
+        <div class="m-row"><span class="m-k">Poids actuel</span><span class="m-v status-warn">135 kg</span></div>
+        <div class="m-row"><span class="m-k">Objectif</span><span class="m-v" style="color:#b0b8c8">91 kg</span></div>
+        <div class="m-row"><span class="m-k">Palier actif</span><span class="m-v status-ok">→ 110 kg</span></div>
+        <div class="m-row"><span class="m-k">Protocole</span><span class="m-v status-ok">TITAN ACTIF</span></div>
+      </div>
+      <div class="profile-card" style="border-color:rgba(255,105,180,.2);background:rgba(255,105,180,.03)">
+        <div class="p-avatar" style="background:rgba(255,105,180,.1);border:1px solid rgba(255,105,180,.35);color:#ff69b4">CA</div>
+        <div class="p-name">CAMILLE</div><div class="p-role">SUIVI PRIORITAIRE</div>
+        <div class="m-row"><span class="m-k">Statut santé</span><span class="m-v status-alert">SURVEILLANCE</span></div>
+        <div class="m-row"><span class="m-k">Prochain RDV</span><span class="m-v status-warn">À PLANIFIER</span></div>
+        <div class="m-row"><span class="m-k">Alertes actives</span><span class="m-v status-alert">2 URGENTES</span></div>
+        <div class="m-row"><span class="m-k">Protocole</span><span class="m-v status-warn">EN COURS</span></div>
+      </div>
+      <div class="profile-card">
+        <div class="p-avatar" style="background:rgba(255,215,0,.07);border:1px solid rgba(255,215,0,.22);color:#ffd700">JU</div>
+        <div class="p-name">JUNE</div><div class="p-role">ENFANT · MONITORING</div>
+        <div class="m-row"><span class="m-k">Développement</span><span class="m-v status-ok">NORMAL</span></div>
+        <div class="m-row"><span class="m-k">Suivi pédiatrique</span><span class="m-v status-ok">À JOUR</span></div>
+        <div class="m-row"><span class="m-k">Vaccinations</span><span class="m-v status-ok">COMPLET</span></div>
+        <div class="m-row"><span class="m-k">Statut global</span><span class="m-v status-ok">✓ STABLE</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TITAN -->
+<div id="p-titan" class="page">
+  <div class="page-hdr">
+    <button class="back-btn" onclick="goToGraph()">← CERVEAU</button>
+    <div class="page-dot" style="background:#00ff88;box-shadow:0 0 12px #00ff88"></div>
+    <div><div class="page-title">TITAN</div><div class="page-sub">COACHING · TRANSFORMATION PHYSIQUE</div></div>
+  </div>
+  <div class="page-body">
+    <div class="titan-grid">
+      <div class="titan-full card"><div class="sec">PROGRESSION POIDS · 135 KG → 91 KG</div>
+        <div class="wt-track"><div class="wt-fill" id="titan-bar" style="width:2%"></div><div class="wt-cur">135 kg</div></div>
+        <div class="wt-labels"><span>135 kg</span><span>OBJECTIF 91 kg</span></div>
+        <div class="wt-stats"><span class="wt-stat-k">PERTE VISÉE<span class="wt-stat-v">44 kg</span></span><span class="wt-stat-k">RESTANT<span class="wt-stat-v" style="color:#b0b8c8">~44 kg</span></span></div>
+      </div>
+      <div class="card"><div class="sec">PALIERS</div><div class="paliers">
+        <div class="palier current"><div class="pal-num">135 kg</div><div><div class="pal-lbl">DÉPART · ACTUEL</div></div><div class="pal-ico">◈</div></div>
+        <div class="palier"><div class="pal-num">110 kg</div><div><div class="pal-lbl">PALIER 1 · EN COURS</div></div><div class="pal-ico">◇</div></div>
+        <div class="palier"><div class="pal-num">100 kg</div><div><div class="pal-lbl">PALIER 2 · À VENIR</div></div><div class="pal-ico">◇</div></div>
+        <div class="palier"><div class="pal-num">91 kg</div><div><div class="pal-lbl">OBJECTIF FINAL</div></div><div class="pal-ico">★</div></div>
+      </div></div>
+      <div class="card"><div class="sec">COMPLÉMENTS ACTIFS</div>
+        <div class="supps"><div class="supp">WHEY PROTÉINE</div><div class="supp">CRÉATINE</div><div class="supp">MAGNÉSIUM</div><div class="supp">OMÉGA-3</div><div class="supp">VITAMINE D3</div><div class="supp">ZINC</div><div class="supp">COENZYME Q10</div><div class="supp">L-CARNITINE</div></div>
+        <div class="proto">Déficit : −500 kcal/j<br>Protéines : 2g/kg objectif<br>Entraînement : 4×/semaine<br>Cardio LISS : 30min × 5/sem</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LOÏC DENYS — NŒUD CENTRAL -->
+<div id="p-loic-denys" class="page">
+  <div class="page-hdr">
+    <button class="back-btn" onclick="goToGraph()">← CERVEAU</button>
+    <div class="page-dot" style="background:#00d4ff;box-shadow:0 0 14px #00d4ff;animation:center-pulse 2s ease-in-out infinite"></div>
+    <div><div class="page-title">LOÏC DENYS</div><div class="page-sub">NŒUD CENTRAL · ARCHITECTE DU SYSTÈME</div></div>
+    <div class="page-clock" id="loic-clock"></div>
+  </div>
+  <div class="loic-body">
+
+    <!-- HERO -->
+    <div class="loic-hero" id="loic-hero">
+      <div class="loic-eyebrow">SYSTÈME NEURONAL · 13 AGENTS · RÉSEAU ACTIF</div>
+      <div class="loic-name">LOÏC DENYS</div>
+      <div class="loic-role-txt">NEXUS · CRÉATEUR · ARCHITECTE · VISIONNAIRE</div>
+      <div class="loic-hero-stats">
+        <div class="lh-stat"><div class="lh-val">13</div><div class="lh-lbl">AGENTS</div></div>
+        <div class="lh-stat"><div class="lh-val">22</div><div class="lh-lbl">CONNEXIONS</div></div>
+        <div class="lh-stat"><div class="lh-val">29</div><div class="lh-lbl">ÉPISODES</div></div>
+        <div class="lh-stat"><div class="lh-val">+36%</div><div class="lh-lbl">PERF CTO</div></div>
+        <div class="lh-stat"><div class="lh-val">8</div><div class="lh-lbl">OBJECTIFS</div></div>
+      </div>
+    </div>
+
+    <!-- 13 AGENTS -->
+    <div>
+      <div class="ls-hdr">
+        <div class="ls-title">RÉSEAU D'AGENTS</div>
+        <div class="ls-count">13 UNITÉS ACTIVES</div>
+        <div class="ls-line"></div>
+      </div>
+      <div class="agents-grid" id="loic-agents-grid"></div>
+    </div>
+
+    <!-- OBJECTIFS + DROITE -->
+    <div class="loic-two">
+      <div>
+        <div class="ls-hdr">
+          <div class="ls-title">OBJECTIFS MAJEURS</div>
+          <div class="ls-count">8 MISSIONS</div>
+          <div class="ls-line"></div>
+        </div>
+        <div class="obj-list">
+          <div class="obj-item" style="--obj-c:#ff4444">
+            <div class="obj-n">OBJ · 01</div><div class="obj-t">LIBERTÉ FINANCIÈRE</div>
+            <div class="obj-s">Trading SMC · Prop firm · 7 actifs whitelist</div>
+            <div class="obj-bar"><div class="obj-bar-f" data-w="35" style="background:linear-gradient(90deg,rgba(255,68,68,.5),#ff4444)"></div></div>
+          </div>
+          <div class="obj-item" style="--obj-c:#ff8c00">
+            <div class="obj-n">OBJ · 02</div><div class="obj-t">PODCAST 300 ÉPISODES</div>
+            <div class="obj-s">Épisode 29/300 · ElevenLabs · Publication 20H00</div>
+            <div class="obj-bar"><div class="obj-bar-f" data-w="10" style="background:linear-gradient(90deg,rgba(255,140,0,.5),#ff8c00)"></div></div>
+          </div>
+          <div class="obj-item" style="--obj-c:#00ff88">
+            <div class="obj-n">OBJ · 03</div><div class="obj-t">TRANSFORMATION PHYSIQUE</div>
+            <div class="obj-s">135 kg → 91 kg · Protocole TITAN · Déficit −500 kcal</div>
+            <div class="obj-bar"><div class="obj-bar-f" data-w="5" style="background:linear-gradient(90deg,rgba(0,255,136,.5),#00ff88)"></div></div>
+          </div>
+          <div class="obj-item" style="--obj-c:#daa520">
+            <div class="obj-n">OBJ · 04</div><div class="obj-t">PATRIMOINE 22 000€+</div>
+            <div class="obj-s">PEA June · CTO IBKR +36.23% · DCA 300€/mois</div>
+            <div class="obj-bar"><div class="obj-bar-f" data-w="35" style="background:linear-gradient(90deg,rgba(218,165,32,.5),#daa520)"></div></div>
+          </div>
+          <div class="obj-item" style="--obj-c:#87ceeb">
+            <div class="obj-n">OBJ · 05</div><div class="obj-t">EMPIRE IA PERSONNEL</div>
+            <div class="obj-s">13 agents déployés · Prompts optimisés · Systèmes autonomes</div>
+            <div class="obj-bar"><div class="obj-bar-f" data-w="60" style="background:linear-gradient(90deg,rgba(135,206,235,.5),#87ceeb)"></div></div>
+          </div>
+          <div class="obj-item" style="--obj-c:#4169e1">
+            <div class="obj-n">OBJ · 06</div><div class="obj-t">FONDATION TECHNIQUE</div>
+            <div class="obj-s">Three.js · GSAP · Full stack maîtrisé · Infra VERTEX</div>
+            <div class="obj-bar"><div class="obj-bar-f" data-w="72" style="background:linear-gradient(90deg,rgba(65,105,225,.5),#4169e1)"></div></div>
+          </div>
+          <div class="obj-item" style="--obj-c:#90ee90">
+            <div class="obj-n">OBJ · 07</div><div class="obj-t">LEADERSHIP MONDIAL</div>
+            <div class="obj-s">Vision empire · Influence globale · CHEF DU MONDE</div>
+            <div class="obj-bar"><div class="obj-bar-f" data-w="20" style="background:linear-gradient(90deg,rgba(144,238,144,.5),#90ee90)"></div></div>
+          </div>
+          <div class="obj-item" style="--obj-c:#ff69b4">
+            <div class="obj-n">OBJ · 08</div><div class="obj-t">FAMILLE PROTÉGÉE</div>
+            <div class="obj-s">Santé Camille · June épanouie · DR.INTEGRA actif</div>
+            <div class="obj-bar"><div class="obj-bar-f" data-w="55" style="background:linear-gradient(90deg,rgba(255,105,180,.5),#ff69b4)"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="loic-right">
+        <div>
+          <div class="ls-hdr"><div class="ls-title">FULL STACK</div><div class="ls-line"></div></div>
+          <div class="gl-card" style="padding:14px">
+            <div class="stack-wrap">
+              <div class="s-chip">THREE.JS</div><div class="s-chip">GSAP 3.12</div>
+              <div class="s-chip">HTML · CSS · JS</div><div class="s-chip">ELEVENLABS</div>
+              <div class="s-chip">CAPCUT</div><div class="s-chip">CANVA</div>
+              <div class="s-chip">TRADINGVIEW</div><div class="s-chip">CLAUDE IA</div>
+              <div class="s-chip">PROMPT ENG.</div><div class="s-chip">IBKR API</div>
+              <div class="s-chip">SMC METHOD.</div><div class="s-chip">DCA SYSTEM</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="ls-hdr"><div class="ls-title">STATISTIQUES RÉSEAU</div><div class="ls-line"></div></div>
+          <div class="net-grid">
+            <div class="net-item"><div class="net-val">13</div><div class="net-lbl">AGENTS</div></div>
+            <div class="net-item"><div class="net-val">22</div><div class="net-lbl">CONNEXIONS</div></div>
+            <div class="net-item"><div class="net-val">29</div><div class="net-lbl">ÉPISODES</div></div>
+            <div class="net-item"><div class="net-val">44kg</div><div class="net-lbl">PERTE VISÉE</div></div>
+            <div class="net-item"><div class="net-val">300€</div><div class="net-lbl">DCA / MOIS</div></div>
+            <div class="net-item"><div class="net-val">7</div><div class="net-lbl">ACTIFS TRADE</div></div>
+          </div>
+        </div>
+        <div>
+          <div class="ls-hdr"><div class="ls-title">STATUT SYSTÈME</div><div class="ls-line"></div></div>
+          <div class="gl-card" style="padding:12px 15px">
+            <div class="sys-row"><span class="sys-k">NŒUD CENTRAL</span><span class="sys-v status-ok">◆ ACTIF</span></div>
+            <div class="sys-row"><span class="sys-k">ATLAS TRADING</span><span class="sys-v status-ok">◆ ACTIF</span></div>
+            <div class="sys-row"><span class="sys-k">PROTOCOLE TITAN</span><span class="sys-v status-ok">◆ ACTIF</span></div>
+            <div class="sys-row"><span class="sys-k">FORGE CONTENU</span><span class="sys-v status-ok">◆ ACTIF</span></div>
+            <div class="sys-row"><span class="sys-k">DR.INTEGRA</span><span class="sys-v status-alert">⚠ SURVEILLANCE</span></div>
+            <div class="sys-row"><span class="sys-k">HERMÈS INVEST.</span><span class="sys-v status-warn">◆ ACTIF</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="fade"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/gsap.min.js"></script>
+<script>
+(function(){
+'use strict';
+
+// ═══════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════
+const NODES = [
+  {id:'LOÏC DENYS',   color:'#00d4ff',center:true, role:'Nœud central',                        tags:['#vision','#créateur','#nexus']},
+  {id:'ATLAS',        color:'#ff4444',center:false,role:'Cartographie stratégique',             tags:['#stratégie','#vision','#mapping']},
+  {id:'HERMÈS',       color:'#ffd700',center:false,role:'Communication & messagerie',           tags:['#comm','#influence','#réseau']},
+  {id:'FORGE',        color:'#ff8c00',center:false,role:'Création & fabrication',              tags:['#build','#création','#output']},
+  {id:'DR.INTEGRA',   color:'#ff69b4',center:false,role:'Intégration santé & performance',     tags:['#santé','#biohacking','#perf']},
+  {id:'TITAN',        color:'#00ff88',center:false,role:"Puissance & mise à l'échelle",        tags:['#scale','#force','#croissance']},
+  {id:'CHEF DU MONDE',color:'#90ee90',center:false,role:'Leadership & ambition mondiale',      tags:['#leadership','#empire','#vision']},
+  {id:'VERTEX',       color:'#4169e1',center:false,role:'Fondation technique & infrastructure',tags:['#tech','#code','#infra']},
+  {id:'ARCH.IA',      color:'#87ceeb',center:false,role:'Architecture Intelligence Artificielle',tags:['#IA','#systèmes','#design']},
+  {id:'PATRIMOINE',   color:'#daa520',center:false,role:'Héritage & actifs durables',          tags:['#richesse','#legacy','#actifs']},
+  {id:'SHELBY',       color:'#a0a8b0',center:false,role:'Opérations discrètes & exécution',    tags:['#ops','#exécution','#discret']},
+  {id:'NEXUS',        color:'#00ffff',center:false,role:'Hub central de connexions',           tags:['#réseau','#pont','#sync']},
+  {id:'VOYAGE',       color:'#9370db',center:false,role:'Exploration & voyages',               tags:['#travel','#découverte','#liberté']},
+  {id:'PROMPTS',      color:'#f0e68c',center:false,role:'Ingénierie des prompts IA',           tags:['#IA','#prompts','#optimisation']},
+];
+
+const EDGES = [
+  ...NODES.filter(n=>!n.center).map(n=>['LOÏC DENYS',n.id]),
+  ['ATLAS','HERMÈS'],['ATLAS','PATRIMOINE'],['HERMÈS','PATRIMOINE'],
+  ['DR.INTEGRA','TITAN'],['DR.INTEGRA','CHEF DU MONDE'],['TITAN','CHEF DU MONDE'],
+  ['FORGE','PATRIMOINE'],['VERTEX','PATRIMOINE'],['ARCH.IA','VERTEX'],
+];
+
+// 3D positions — redistributed, min inter-node distance ≥ 3.0
+const ND3D = {
+  'LOÏC DENYS':   [0,     0,     0    ],
+  'NEXUS':        [0,     3.3,   0.5  ],
+  'CHEF DU MONDE':[2.3,   2.1,  -1.2  ],
+  'TITAN':        [3.2,   0.5,   1.3  ],
+  'HERMÈS':       [3.0,  -1.2,  -1.4  ],
+  'ATLAS':        [1.5,  -2.9,   1.2  ],
+  'VERTEX':       [0.2,  -3.2,  -1.9  ],
+  'ARCH.IA':      [-1.2, -2.9,   1.6  ],
+  'FORGE':        [-3.0, -1.5,  -0.9  ],
+  'PROMPTS':      [-2.9,  1.3,  -1.8  ],
+  'PATRIMOINE':   [-2.9, -0.6,   2.1  ],
+  'VOYAGE':       [-1.5,  2.0,   2.8  ],
+  'DR.INTEGRA':   [-0.7,  2.7,  -2.4  ],
+  'SHELBY':       [1.0,   0.5,  -3.4  ],
+};
+
+function ss(t){t=Math.max(0,Math.min(1,t));return t*t*(3-2*t)}
+function lp(a,b,t){return a+(b-a)*t}
+function hexA(h,a){const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);return'rgba('+r+','+g+','+b+','+a+')'}
+
+// ═══════════════════════════════════════════
+// THREE.JS
+// ═══════════════════════════════════════════
+const canvas=document.getElementById('brain-canvas');
+let W=window.innerWidth,H=window.innerHeight;
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(60,W/H,0.1,100);
+cam.position.set(0,0,12);
+const ren=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+ren.setPixelRatio(Math.min(devicePixelRatio,2));
+ren.setSize(W,H);
+ren.setClearColor(0x000008,1);
+
+// ═══════════════════════════════════════════
+// BRAIN PARTICLES (5000) + sillons réalistes
+// ═══════════════════════════════════════════
+const N=5000,BR=4.5,CN=Math.floor(N*0.2),NT=N*2;
+const bPos=new Float32Array(NT*3),sPos=new Float32Array(NT*3);
+const pCol=new Float32Array(NT*3),pSz=new Float32Array(NT);
+const GA=Math.PI*(3-Math.sqrt(5));
+
+for(let i=0;i<N;i++){
+  const y=1-(i/(N-1))*2,r=Math.sqrt(Math.max(0,1-y*y)),th=GA*i;
+  const x=Math.cos(th)*r,z=Math.sin(th)*r;
+  const ph=Math.asin(Math.max(-1,Math.min(1,y)));
+  // Sillons cérébraux réalistes — gyri multicouches
+  const fold=
+    0.13*Math.sin(th*5+ph*3)+
+    0.09*Math.cos(th*8-ph*4)+
+    0.07*Math.sin(ph*9+th*2)+
+    0.05*Math.cos(th*12+ph*3)+
+    0.035*Math.sin(th*16-ph*6)+
+    0.02*Math.cos(th*6+ph*10)+
+    0.015*Math.sin(th*20+ph*4);
+  // Fissure inter-hémisphérique
+  const fissure=Math.abs(x)<0.25?-0.15*Math.exp(-x*x*16):0;
+  // Aplatissement ventral + protubérance frontale
+  const shape=y<0?0.88:1.0;
+  const sc=BR*(1+fold+fissure)*shape;
+  bPos[i*3]=x*sc;
+  bPos[i*3+1]=y*sc*(1+0.1*Math.abs(y));
+  bPos[i*3+2]=z*sc;
+  // Dispersion étoiles
+  const sr=5+Math.random()*7,sa=Math.random()*Math.PI*2,sb=Math.acos(2*Math.random()-1);
+  sPos[i*3]=sr*Math.sin(sb)*Math.cos(sa);
+  sPos[i*3+1]=sr*Math.sin(sb)*Math.sin(sa);
+  sPos[i*3+2]=sr*Math.cos(sb);
+  // Couleurs : cyan pour les points brillants, blanc-bleu pour le reste
+  if(i<CN){pCol[i*3]=0;pCol[i*3+1]=0.83;pCol[i*3+2]=1;}
+  else{
+    const w=0.72+Math.random()*0.22;
+    pCol[i*3]=w*0.75;pCol[i*3+1]=w*0.88;pCol[i*3+2]=w;
+  }
+  pSz[i]=i<CN?0.12+Math.random()*0.09:0.0675+Math.random()*0.075;
+  // Point intérieur à 70% du rayon — même couleur, plus dim et plus petit
+  const ii=N+i;
+  bPos[ii*3]=bPos[i*3]*0.7; bPos[ii*3+1]=bPos[i*3+1]*0.7; bPos[ii*3+2]=bPos[i*3+2]*0.7;
+  sPos[ii*3]=sPos[i*3]; sPos[ii*3+1]=sPos[i*3+1]; sPos[ii*3+2]=sPos[i*3+2];
+  pCol[ii*3]=pCol[i*3]*0.35; pCol[ii*3+1]=pCol[i*3+1]*0.35; pCol[ii*3+2]=pCol[i*3+2]*0.35;
+  pSz[ii]=pSz[i]*0.6;
+}
+
+function mkGlow(){
+  const sz=96,c=document.createElement('canvas');c.width=c.height=sz;
+  const ctx=c.getContext('2d'),g=ctx.createRadialGradient(sz/2,sz/2,0,sz/2,sz/2,sz/2);
+  g.addColorStop(0,'rgba(255,255,255,1)');
+  g.addColorStop(0.12,'rgba(220,245,255,0.9)');
+  g.addColorStop(0.3,'rgba(180,230,255,0.55)');
+  g.addColorStop(0.55,'rgba(100,200,255,0.18)');
+  g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,sz,sz);return new THREE.CanvasTexture(c);
+}
+
+const pGeo=new THREE.BufferGeometry();
+const pArr=new Float32Array(bPos);
+pGeo.setAttribute('position',new THREE.BufferAttribute(pArr,3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute('color',new THREE.BufferAttribute(pCol,3));
+pGeo.setAttribute('size',new THREE.BufferAttribute(pSz,1));
+
+const pMat=new THREE.ShaderMaterial({
+  uniforms:{uTex:{value:mkGlow()}},
+  vertexShader:'attribute float size;attribute vec3 color;varying vec3 vColor;void main(){vColor=color;vec4 mv=modelViewMatrix*vec4(position,1.0);gl_PointSize=size*(500.0/-mv.z);gl_Position=projectionMatrix*mv;}',
+  fragmentShader:'uniform sampler2D uTex;varying vec3 vColor;void main(){vec4 t=texture2D(uTex,gl_PointCoord);if(t.a<0.015)discard;gl_FragColor=vec4(vColor,t.r*t.a);}',
+  transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,
+});
+const brainMesh=new THREE.Points(pGeo,pMat);
+
+// Cyan twinkle
+const cIdx=[],cPh=[],cSp=[];
+for(let i=0;i<CN;i++){cIdx.push(i);cPh.push(Math.random()*Math.PI*2);cSp.push(1.2+Math.random()*2);}
+
+// Morph cycle: 0–5s brain | 5–7s disperse | 7–10s reform — INTACT
+function getMT(t){const c=t%10;if(c<5)return 0;if(c<7)return(c-5)/2;return 1-(c-7)/3;}
+
+// ═══════════════════════════════════════════
+// GRAPH GROUP + EDGES + DOTS
+// ═══════════════════════════════════════════
+const gg=new THREE.Group();
+gg.add(brainMesh);
+scene.add(gg);
+
+const nPos={};
+NODES.forEach(nd=>nPos[nd.id]=new THREE.Vector3(...ND3D[nd.id]));
+
+const fp={};
+NODES.filter(n=>!n.center).forEach(nd=>{fp[nd.id]={ax:.12+Math.random()*.1,ay:.09+Math.random()*.09,az:.1+Math.random()*.08,sp:.18+Math.random()*.14,px:Math.random()*Math.PI*2,py:Math.random()*Math.PI*2,pz:Math.random()*Math.PI*2};});
+
+const EC=EDGES.length;
+const eBuf=new Float32Array(EC*6),eGeo=new THREE.BufferGeometry();
+eGeo.setAttribute('position',new THREE.BufferAttribute(eBuf,3).setUsage(THREE.DynamicDrawUsage));
+const eMat=new THREE.LineBasicMaterial({color:0x1a4466,transparent:true,opacity:.4});
+gg.add(new THREE.LineSegments(eGeo,eMat));
+
+const cBuf=new Float32Array(EC*6),cGeo=new THREE.BufferGeometry();
+cGeo.setAttribute('position',new THREE.BufferAttribute(cBuf,3).setUsage(THREE.DynamicDrawUsage));
+const cMat=new THREE.LineBasicMaterial({color:0x00d4ff,transparent:true,opacity:.25});
+gg.add(new THREE.LineSegments(cGeo,cMat));
+
+// ═══════════════════════════════════════════
+// NEURAL IMPULSES
+// ═══════════════════════════════════════════
+const N_IMP=3,IMP_TOT=EC*N_IMP;
+const impPos=new Float32Array(IMP_TOT*3),impSz=new Float32Array(IMP_TOT);
+const impGeo=new THREE.BufferGeometry();
+impGeo.setAttribute('position',new THREE.BufferAttribute(impPos,3).setUsage(THREE.DynamicDrawUsage));
+impGeo.setAttribute('size',new THREE.BufferAttribute(impSz,1).setUsage(THREE.DynamicDrawUsage));
+
+function mkImpTex(){
+  const sz=64,c=document.createElement('canvas');c.width=c.height=sz;
+  const ctx=c.getContext('2d'),g=ctx.createRadialGradient(sz/2,sz/2,0,sz/2,sz/2,sz/2);
+  g.addColorStop(0,'rgba(255,255,255,1)');
+  g.addColorStop(.12,'rgba(255,255,255,.95)');
+  g.addColorStop(.3,'rgba(140,230,255,.72)');
+  g.addColorStop(.55,'rgba(0,212,255,.28)');
+  g.addColorStop(.8,'rgba(0,150,220,.06)');
+  g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,sz,sz);return new THREE.CanvasTexture(c);
+}
+const impMat=new THREE.ShaderMaterial({
+  uniforms:{uTex:{value:mkImpTex()}},
+  vertexShader:'attribute float size;void main(){vec4 mv=modelViewMatrix*vec4(position,1.0);gl_PointSize=size*(600.0/-mv.z);gl_Position=projectionMatrix*mv;}',
+  fragmentShader:'uniform sampler2D uTex;void main(){vec4 t=texture2D(uTex,gl_PointCoord);if(t.a<0.015)discard;gl_FragColor=t;}',
+  transparent:true,blending:THREE.AdditiveBlending,depthWrite:false
+});
+gg.add(new THREE.Points(impGeo,impMat));
+
+const impData=EDGES.map(()=>Array.from({length:N_IMP},(_,k)=>({
+  ph:(k/N_IMP)+Math.random()*(0.55/N_IMP),
+  sp:.07+Math.random()*.09,
+  perpAmp:.07+Math.random()*.08,
+  perpFreq:1.5+Math.random()*2.5,
+  perpPh:Math.random()*Math.PI*2,
+  flashed:false
+})));
+
+// ═══════════════════════════════════════════
+// HTML LABELS
+// ═══════════════════════════════════════════
+const lov=document.getElementById('label-overlay');
+const LEL={};
+
+NODES.forEach(nd=>{
+  const div=document.createElement('div');
+  div.className='nd-label'+(nd.center?' center':'');
+  const sz=nd.center?82:48;
+  const bub=document.createElement('div');
+  bub.className='bubble';
+  bub.style.cssText='width:'+sz+'px;height:'+sz+'px;border-color:'+nd.color+';background:transparent;box-shadow:0 0 '+(nd.center?28:22)+'px '+nd.color+',0 0 '+(nd.center?55:44)+'px '+hexA(nd.color,.55)+',0 0 '+(nd.center?90:80)+'px '+hexA(nd.color,.2);
+  const lbl=document.createElement('div');
+  lbl.className='lbl';lbl.textContent=nd.id;
+  if(nd.center)lbl.style.color=nd.color;
+  div.appendChild(bub);div.appendChild(lbl);
+  div.addEventListener('click',()=>{if(appState!=='graph'||isTr||isDrag)return;goToPage(nd.id);});
+  if(!nd.center){
+    div.addEventListener('mouseenter',()=>{bub.style.boxShadow='0 0 40px '+nd.color+',0 0 80px '+nd.color+',0 0 130px '+hexA(nd.color,.5);});
+    div.addEventListener('mouseleave',()=>{bub.style.boxShadow='0 0 22px '+nd.color+',0 0 44px '+hexA(nd.color,.55)+',0 0 80px '+hexA(nd.color,.2);});
+  }
+  div.style.opacity='0';
+  lov.appendChild(div);
+  LEL[nd.id]={el:div,bub};
+});
+
+setTimeout(()=>NODES.forEach((nd,i)=>gsap.to(LEL[nd.id].el,{opacity:1,duration:.5,delay:i*.07})),700);
+setTimeout(()=>{if(LEL['LOÏC DENYS'])gsap.to(LEL['LOÏC DENYS'].bub,{scale:1.12,duration:.85,yoyo:true,repeat:-1,ease:'power1.inOut'});},2500);
+
+// ═══════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════
+let isDrag=false,prevMX=0,prevMY=0;
+let tRotY=0,tRotX=0,cRotY=0,cRotX=0;
+let tCamZ=12,cCamZ=12,autoRY=0;
+
+window.addEventListener('mousedown',e=>{
+  if(appState!=='graph')return;
+  if(e.target.closest('.nd-label'))return;
+  isDrag=true;prevMX=e.clientX;prevMY=e.clientY;
+  canvas.classList.add('dragging');
+  Object.values(LEL).forEach(o=>o.el.style.pointerEvents='none');
+});
+window.addEventListener('mousemove',e=>{
+  if(!isDrag)return;
+  const dx=e.clientX-prevMX,dy=e.clientY-prevMY;
+  tRotY+=dx*.007;tRotX+=dy*.007;
+  tRotX=Math.max(-1.3,Math.min(1.3,tRotX));
+  prevMX=e.clientX;prevMY=e.clientY;
+});
+window.addEventListener('mouseup',()=>{
+  isDrag=false;canvas.classList.remove('dragging');
+  setTimeout(()=>Object.values(LEL).forEach(o=>o.el.style.pointerEvents='auto'),50);
+});
+window.addEventListener('wheel',e=>{
+  if(appState!=='graph')return;
+  tCamZ=Math.max(5,Math.min(20,tCamZ+e.deltaY*.014));
+},{passive:true});
+window.addEventListener('resize',()=>{W=window.innerWidth;H=window.innerHeight;cam.aspect=W/H;cam.updateProjectionMatrix();ren.setSize(W,H);});
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let appState='graph',isTr=false;
+const fadeEl=document.getElementById('fade');
+const snEl=document.getElementById('sidenav');
+const PAGE_MAP={'LOÏC DENYS':'p-loic-denys','ATLAS':'p-atlas','HERMÈS':'p-hermes','FORGE':'p-forge','DR.INTEGRA':'p-drintegra','TITAN':'p-titan'};
+let doExpl=false,explT=0;
+function trigExpl(){doExpl=true;explT=0;}
+
+// ═══════════════════════════════════════════
+// ANIMATION
+// ═══════════════════════════════════════════
+const pPA=pGeo.attributes.position,pCA=pGeo.attributes.color;
+function trigFlash(nodeId){
+  const ld=LEL[nodeId];if(!ld||!ld.bub)return;
+  gsap.to(ld.bub,{scale:1.55,duration:.07,yoyo:true,repeat:1,ease:'power2.inOut'});
+}
+
+let lastT=0;
+
+function animate(ts){
+  requestAnimationFrame(animate);
+  const t=ts/1000,dt=t-lastT;lastT=t;
+
+  // Controls damping
+  if(!isDrag)autoRY+=.0008;
+  cRotY=lp(cRotY,tRotY+autoRY,.06);cRotX=lp(cRotX,tRotX,.06);cCamZ=lp(cCamZ,tCamZ,.08);
+  gg.rotation.y=cRotY;gg.rotation.x=cRotX;cam.position.z=cCamZ;
+
+  // Node orbital float
+  NODES.forEach(nd=>{
+    if(nd.center)return;
+    const f=fp[nd.id],b=ND3D[nd.id];
+    nPos[nd.id].set(b[0]+f.ax*Math.cos(t*f.sp+f.px),b[1]+f.ay*Math.sin(t*f.sp*.7+f.py),b[2]+f.az*Math.sin(t*f.sp*.5+f.pz));
+  });
+
+  // Edges
+  EDGES.forEach(([a,b],i)=>{
+    const pA=nPos[a],pB=nPos[b],isC=(a==='LOÏC DENYS'||b==='LOÏC DENYS');
+    const buf=isC?cBuf:eBuf;
+    buf[i*6]=pA.x;buf[i*6+1]=pA.y;buf[i*6+2]=pA.z;
+    buf[i*6+3]=pB.x;buf[i*6+4]=pB.y;buf[i*6+5]=pB.z;
+  });
+  eGeo.attributes.position.needsUpdate=true;cGeo.attributes.position.needsUpdate=true;
+  eMat.opacity=.15+.3*(0.5+0.5*Math.sin(t*.7));
+  cMat.opacity=.12+.22*(0.5+0.5*Math.sin(t*.9+1));
+
+  // Neural impulses — sinusoidal, eased, multi-per-edge
+  EDGES.forEach(([a,b],ei)=>{
+    const pA=nPos[a],pB=nPos[b];
+    const dx=pB.x-pA.x,dy=pB.y-pA.y,dz=pB.z-pA.z;
+    const len=Math.sqrt(dx*dx+dy*dy+dz*dz);
+    if(len<0.001)return;
+    const nx=dx/len,ny=dy/len,nz=dz/len;
+    // Perpendicular vector (cross with world-up or world-right)
+    let qx,qy,qz;
+    if(Math.abs(ny)<0.9){const pm=Math.sqrt(nz*nz+nx*nx);qx=-nz/pm;qy=0;qz=nx/pm;}
+    else{const pm=Math.sqrt(nz*nz+ny*ny);qx=0;qy=nz/pm;qz=-ny/pm;}
+    impData[ei].forEach((imp,k)=>{
+      const raw=((t*imp.sp+imp.ph)%1+1)%1;
+      // Ease in-out (slow–fast–slow synapse)
+      const te=raw<.5?2*raw*raw:1-Math.pow(-2*raw+2,2)/2;
+      // Sinusoidal oscillation perpendicular to edge
+      const osc=imp.perpAmp*Math.sin(imp.perpFreq*Math.PI*2*raw+imp.perpPh);
+      const idx=(ei*N_IMP+k)*3;
+      impPos[idx]  =pA.x+dx*te+qx*osc;
+      impPos[idx+1]=pA.y+dy*te+qy*osc;
+      impPos[idx+2]=pA.z+dz*te+qz*osc;
+      // Dynamic size: grows at peak speed (middle), shrinks at ends
+      impSz[ei*N_IMP+k]=0.05+0.15*(4*raw*(1-raw));
+      // Flash on arrival
+      if(raw>0.92&&!imp.flashed){imp.flashed=true;trigFlash(b);}
+      else if(raw<0.08)imp.flashed=false;
+    });
+  });
+  impGeo.attributes.position.needsUpdate=true;
+  impGeo.attributes.size.needsUpdate=true;
+
+  // Brain morphing
+  if(doExpl){explT=Math.min(1,explT+dt*2.5);if(explT>=1)doExpl=false;}
+  const bMT=getMT(t),morphT=doExpl?Math.max(bMT,ss(explT)):bMT,eased=ss(morphT);
+  const breath=1+.04*Math.sin(t*.65);
+  for(let i=0;i<NT;i++){
+    pPA.array[i*3]=lp(bPos[i*3]*breath,sPos[i*3],eased);
+    pPA.array[i*3+1]=lp(bPos[i*3+1]*breath,sPos[i*3+1],eased);
+    pPA.array[i*3+2]=lp(bPos[i*3+2]*breath,sPos[i*3+2],eased);
+  }
+  pPA.needsUpdate=true;
+  cIdx.forEach((idx,j)=>{const tw=.4+.6*(.5+.5*Math.sin(t*cSp[j]+cPh[j]));pCA.array[idx*3]=0;pCA.array[idx*3+1]=.83*tw;pCA.array[idx*3+2]=tw;});
+  pCA.needsUpdate=true;
+
+  // Label projection
+  if(appState==='graph'){
+    NODES.forEach(nd=>{
+      const ld=LEL[nd.id];if(!ld)return;
+      const wp=nPos[nd.id].clone();gg.localToWorld(wp);wp.project(cam);
+      if(wp.z>1){ld.el.style.visibility='hidden';return;}
+      ld.el.style.visibility='visible';
+      ld.el.style.left=(wp.x*.5+.5)*W+'px';
+      ld.el.style.top=(-.5*wp.y+.5)*H+'px';
+    });
+  }
+
+  ren.render(scene,cam);
+}
+requestAnimationFrame(animate);
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+function goToPage(nodeId){
+  if(appState!=='graph'||isTr)return;
+  const pid=PAGE_MAP[nodeId]||'p-'+nodeId.toLowerCase().replace(/[\s.]/g,'-');
+  if(!document.getElementById(pid))return;
+  isTr=true;
+  const ld=LEL[nodeId];
+  if(ld)gsap.to(ld.bub,{scale:1.45,opacity:.6,duration:.12,yoyo:true,repeat:1});
+  trigExpl();
+  const wp=nPos[nodeId].clone();gg.localToWorld(wp);
+  gsap.to(cam.position,{x:wp.x*.18,y:wp.y*.18,z:wp.z*.18+3.5,duration:.7,ease:'power2.in'});
+  gsap.to(fadeEl,{opacity:1,duration:.35,delay:.42,onComplete:()=>{
+    Object.values(LEL).forEach(o=>o.el.style.display='none');
+    document.querySelectorAll('.page').forEach(p=>{p.style.display='none';p.style.opacity='0';});
+    const page=document.getElementById(pid);
+    if(page){page.style.display='flex';gsap.set(page,{opacity:0});}
+    snEl.classList.add('visible');
+    document.querySelectorAll('.sn-item').forEach(el=>el.classList.toggle('sn-active',el.dataset.id===nodeId));
+    appState=nodeId;
+    cam.position.set(0,0,12);cCamZ=tCamZ=12;doExpl=false;explT=0;
+    if(page)gsap.to(page,{opacity:1,duration:.35});
+    gsap.to(fadeEl,{opacity:0,duration:.35});
+    isTr=false;onPageOpen(nodeId);
+  }});
+}
+
+function goToGraph(){
+  if(isTr)return;isTr=true;
+  gsap.to(fadeEl,{opacity:1,duration:.25,onComplete:()=>{
+    document.querySelectorAll('.page').forEach(p=>{p.style.display='none';p.style.opacity='0';});
+    snEl.classList.remove('visible');
+    Object.values(LEL).forEach(o=>{o.el.style.display='flex';o.el.style.opacity='1';});
+    appState='graph';
+    gsap.to(fadeEl,{opacity:0,duration:.35,onComplete:()=>{isTr=false;}});
+  }});
+}
+
+function buildAgentCards(){
+  const g=document.getElementById('loic-agents-grid');
+  if(!g||g.dataset.built)return;
+  g.dataset.built='1';
+  const ns=NODES.filter(n=>!n.center);
+  g.innerHTML=ns.map((nd,i)=>`<div class="agent-card" data-ni="${i}">
+    <div class="agent-card-glow" style="background:${nd.color}"></div>
+    <div class="agent-card-num">${String(i+1).padStart(2,'0')}</div>
+    <div class="agent-card-name" style="color:${nd.color}">${nd.id}</div>
+    <div class="agent-card-role">${nd.role}</div>
+    <div class="agent-card-tags">${nd.tags.map(t=>'<span class="agent-card-tag">'+t+'</span>').join('')}</div>
+  </div>`).join('');
+  g.querySelectorAll('.agent-card').forEach((el,i)=>el.addEventListener('click',()=>goToPage(ns[i].id)));
+}
+
+function onLoicOpen(){
+  clearInterval(loicCI);
+  const uc=()=>{const el=document.getElementById('loic-clock');if(!el)return;const n=new Date();el.textContent=String(n.getUTCHours()).padStart(2,'0')+':'+String(n.getUTCMinutes()).padStart(2,'0')+':'+String(n.getUTCSeconds()).padStart(2,'0')+' UTC';};
+  uc();loicCI=setInterval(uc,1000);
+  buildAgentCards();
+  gsap.from('#loic-hero',{opacity:0,y:-18,duration:.55,ease:'power2.out'});
+  gsap.from('.lh-stat',{opacity:0,y:10,duration:.35,stagger:.07,delay:.2,ease:'power2.out'});
+  gsap.from('.agent-card',{opacity:0,y:14,scale:.96,duration:.35,stagger:.04,delay:.3,ease:'power2.out'});
+  gsap.from('.obj-item',{opacity:0,x:-14,duration:.35,stagger:.055,delay:.4,ease:'power2.out'});
+  gsap.from('.s-chip',{opacity:0,scale:.88,duration:.28,stagger:.03,delay:.5,ease:'back.out(1.5)'});
+  gsap.from('.net-item',{opacity:0,y:8,duration:.28,stagger:.045,delay:.55,ease:'power2.out'});
+  gsap.from('.sys-row',{opacity:0,x:10,duration:.26,stagger:.04,delay:.6,ease:'power2.out'});
+  gsap.to('.loic-name',{textShadow:'0 0 60px rgba(0,212,255,.85),0 0 140px rgba(0,212,255,.35),0 0 2px rgba(0,212,255,.95)',duration:1.2,yoyo:true,repeat:-1,ease:'power1.inOut',delay:.1});
+  setTimeout(()=>{document.querySelectorAll('#p-loic-denys .obj-bar-f').forEach(b=>{b.style.width=(b.dataset.w||0)+'%';});},700);
+}
+
+function onPageOpen(id){
+  if(id==='ATLAS'){renderPrices();updateKZ();startAtlasClock();}
+  if(id==='TITAN')setTimeout(()=>{document.getElementById('titan-bar').style.width='2%';},150);
+  if(id==='LOÏC DENYS')onLoicOpen();
+}
+
+// Sidenav
+(function(){
+  const items=document.getElementById('sn-items');
+  NODES.filter(n=>!n.center).forEach(nd=>{
+    const el=document.createElement('div');el.className='sn-item';el.dataset.id=nd.id;
+    el.innerHTML='<span class="sn-dot" style="background:'+nd.color+';box-shadow:0 0 4px '+nd.color+'"></span><span>'+nd.id+'</span>';
+    el.addEventListener('click',()=>goToPage(nd.id));items.appendChild(el);
+  });
+})();
+
+// Simple pages
+['CHEF DU MONDE','VERTEX','ARCH.IA','PATRIMOINE','SHELBY','NEXUS','VOYAGE','PROMPTS'].forEach(nid=>{
+  const nd=NODES.find(n=>n.id===nid);if(!nd)return;
+  const pid='p-'+nid.toLowerCase().replace(/[\s.]/g,'-');PAGE_MAP[nid]=pid;
+  const conns=EDGES.filter(([a,b])=>a===nid||b===nid).map(([a,b])=>a===nid?b:a);
+  const div=document.createElement('div');div.id=pid;div.className='page';
+  div.innerHTML='<div class="page-hdr" style="--accent:'+nd.color+'"><button class="back-btn" onclick="goToGraph()">← CERVEAU</button><div class="page-dot" style="background:'+nd.color+';box-shadow:0 0 12px '+nd.color+'"></div><div><div class="page-title" style="--accent:'+nd.color+'">'+nd.id+'</div><div class="page-sub">'+nd.role.toUpperCase()+'</div></div></div><div class="page-body" style="display:flex;flex-direction:column"><div class="simple-body"><div class="card"><div class="sec">TAGS</div><div class="conns-flex">'+nd.tags.map(t=>'<span class="tag" style="border-color:'+nd.color+'44;color:'+nd.color+'">'+t+'</span>').join('')+'</div></div><div class="card"><div class="sec">CONNEXIONS · '+conns.length+'</div><div class="conns-flex">'+conns.map(id=>{const n2=NODES.find(n=>n.id===id);return'<div class="conn-card" onclick="goToPage(\''+id+'\')"><span class="conn-dot" style="background:'+(n2?.color||'#00d4ff')+'"></span><span>'+id+'</span></div>';}).join('')+'</div></div><div class="wip">DASHBOARD EN CONSTRUCTION</div></div></div>';
+  document.body.appendChild(div);
+});
+
+// Atlas live
+const PRICES={US30:{v:43251.20,base:43251.20,dec:2,vol:2.5},SPX500:{v:5921.45,base:5921.45,dec:2,vol:.6},EURUSD:{v:1.08210,base:1.08210,dec:5,vol:.00028},EURJPY:{v:162.450,base:162.450,dec:3,vol:.028},BTCUSD:{v:97520.0,base:97520.0,dec:2,vol:55},GBPUSD:{v:1.26350,base:1.26350,dec:5,vol:.00024},NZDUSD:{v:.58120,base:.58120,dec:5,vol:.00017}};
+function renderPrices(){const tb=document.getElementById('price-tbody');if(!tb)return;tb.innerHTML=Object.entries(PRICES).map(([sym,p])=>{const chg=((p.v-p.base)/p.base*100),up=chg>=0,bar=Math.min(100,Math.abs(chg)*25+25);return'<tr><td class="psym">'+sym+'</td><td class="pval" id="pv-'+sym+'">'+p.v.toFixed(p.dec)+'</td><td class="pchg '+(up?'pup':'pdn')+'" id="pc-'+sym+'">'+(up?'▲ +':'▼ ')+Math.abs(chg).toFixed(2)+'%</td><td><div class="pbar"><div class="pbar-f" style="width:'+bar+'%;background:'+(up?'#00ff88':'#ff4444')+'"></div></div></td></tr>';}).join('');}
+setInterval(()=>{Object.values(PRICES).forEach(p=>{p.v+=(Math.random()-.49)*p.vol;});if(appState==='ATLAS'){Object.entries(PRICES).forEach(([sym,p])=>{const chg=((p.v-p.base)/p.base*100),up=chg>=0;const ve=document.getElementById('pv-'+sym),ce=document.getElementById('pc-'+sym);if(ve)ve.textContent=p.v.toFixed(p.dec);if(ce){ce.textContent=(up?'▲ +':'▼ ')+Math.abs(chg).toFixed(2)+'%';ce.className='pchg '+(up?'pup':'pdn');}});}},2200);
+function updateKZ(){const now=new Date(),t=now.getUTCHours()*60+now.getUTCMinutes();const z={asian:(t>=22*60||t<=2*60),london:(t>=7*60&&t<=11*60),ny:(t>=12*60&&t<=16*60)};[['asian','kz-asian'],['london','kz-london'],['ny','kz-ny']].forEach(([k,id])=>{const el=document.getElementById(id),lb=document.getElementById(id+'-lbl');if(!el)return;if(z[k]){el.classList.add('kz-open');if(lb)lb.textContent='OUVERT';}else{el.classList.remove('kz-open');if(lb)lb.textContent='FERMÉ';}});}
+let aCI=null,loicCI=null;
+function startAtlasClock(){clearInterval(aCI);const u=()=>{const now=new Date(),el=document.getElementById('atlas-clock');if(el)el.textContent=String(now.getUTCHours()).padStart(2,'0')+':'+String(now.getUTCMinutes()).padStart(2,'0')+':'+String(now.getUTCSeconds()).padStart(2,'0')+' UTC';updateKZ();};u();aCI=setInterval(u,1000);}
+
+function toggleChk(el){el.classList.toggle('checked');}
+window.goToGraph=goToGraph;window.goToPage=goToPage;window.toggleChk=toggleChk;
+
+})();
+</script>
+</body>
+</html>
