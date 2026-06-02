@@ -821,11 +821,13 @@ NODES.forEach(nd=>{
   const sz=nd.center?82:48;
   const bub=document.createElement('div');
   bub.className='bubble';
-  bub.style.cssText='width:'+sz+'px;height:'+sz+'px;border-color:'+nd.color+';background:transparent;box-shadow:0 0 '+(nd.center?28:22)+'px '+nd.color+',0 0 '+(nd.center?55:44)+'px '+hexA(nd.color,.55)+',0 0 '+(nd.center?90:80)+'px '+hexA(nd.color,.2);
-  const lbl=document.createElement('div');
-  lbl.className='lbl';lbl.textContent=nd.id;
-  if(nd.center)lbl.style.color=nd.color;
-  div.appendChild(bub);div.appendChild(lbl);
+  bub.style.cssText='width:'+sz+'px;height:'+sz+'px;border-color:'+nd.color+';background:transparent;overflow:hidden;box-shadow:0 0 '+(nd.center?28:22)+'px '+nd.color+',0 0 '+(nd.center?55:44)+'px '+hexA(nd.color,.55)+',0 0 '+(nd.center?90:80)+'px '+hexA(nd.color,.2);
+  const inner=document.createElement('span');
+  const fz=nd.center?8:Math.max(5,8-Math.floor(nd.id.replace(/\s+/g,'').length/5));
+  inner.style.cssText='max-width:'+(sz-10)+'px;font-size:'+fz+'px;color:'+(nd.center?nd.color:'rgba(255,255,255,0.92)')+';letter-spacing:0.05em;text-align:center;word-break:break-word;line-height:1.25;pointer-events:none;text-shadow:0 0 4px rgba(0,0,0,1)';
+  inner.textContent=nd.id;
+  bub.appendChild(inner);
+  div.appendChild(bub);
   div.addEventListener('click',()=>{if(appState!=='graph'||isTr||isDrag)return;goToPage(nd.id);});
   if(!nd.center){
     div.addEventListener('mouseenter',()=>{bub.style.boxShadow='0 0 40px '+nd.color+',0 0 80px '+nd.color+',0 0 130px '+hexA(nd.color,.5);});
