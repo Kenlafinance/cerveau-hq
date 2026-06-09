@@ -654,6 +654,10 @@ const ND3D = {
 // (facteurs alignés sur les proportions du cerveau : profondeur > largeur > hauteur)
 const NODE_SX=0.66,NODE_SY=0.56,NODE_SZ=0.74;
 Object.keys(ND3D).forEach(id=>{const p=ND3D[id];ND3D[id]=[p[0]*NODE_SX,p[1]*NODE_SY,p[2]*NODE_SZ];});
+// Restaure les positions sauvegardées par un drag précédent (localStorage)
+try{const saved=JSON.parse(localStorage.getItem('cerveau_nodes')||'null');
+  if(saved)Object.keys(saved).forEach(id=>{if(ND3D[id]&&Array.isArray(saved[id]))ND3D[id]=saved[id].slice();});
+}catch(_){}
 
 function ss(t){t=Math.max(0,Math.min(1,t));return t*t*(3-2*t)}
 function lp(a,b,t){return a+(b-a)*t}
@@ -914,6 +918,10 @@ const impData=EDGES.map(()=>Array.from({length:N_IMP},(_,k)=>({
 const lov=document.getElementById('label-overlay');
 const LEL={};
 
+// — État du drag de nœuds (Fix 2)
+let grabbedId=null,grabDepth=0,grabTimer=null,pressInfo=null,dragPrev=null,dragLast=null;
+const lockedFloat=new Set();
+
 NODES.forEach(nd=>{
   const div=document.createElement('div');
   div.className='nd-label'+(nd.center?' center':'');
@@ -931,10 +939,14 @@ NODES.forEach(nd=>{
   lbl.textContent=nd.id;
   div.appendChild(bub);
   div.appendChild(lbl);
-  div.addEventListener('click',()=>{if(appState!=='graph'||isTr||isDrag)return;goToPage(nd.id);});
+  bub.style.touchAction='none';
+  div.addEventListener('pointerdown',ev=>onNodeDown(ev,nd));
+  div.addEventListener('pointermove',ev=>onNodeMove(ev,nd));
+  div.addEventListener('pointerup',ev=>onNodeUp(ev,nd));
+  div.addEventListener('pointercancel',ev=>onNodeUp(ev,nd));
   if(!nd.center){
-    div.addEventListener('mouseenter',()=>{bub.style.boxShadow='0 0 16px rgba(232,232,232,.55),0 0 32px rgba(232,232,232,.2)';});
-    div.addEventListener('mouseleave',()=>{bub.style.boxShadow='0 0 7px rgba(225,225,225,.25),0 0 14px rgba(225,225,225,.08)';});
+    div.addEventListener('mouseenter',()=>{if(!grabbedId)bub.style.boxShadow='0 0 16px rgba(232,232,232,.55),0 0 32px rgba(232,232,232,.2)';});
+    div.addEventListener('mouseleave',()=>{if(grabbedId!==nd.id)bub.style.boxShadow='0 0 7px rgba(225,225,225,.25),0 0 14px rgba(225,225,225,.08)';});
   }
   div.style.opacity='0';
   lov.appendChild(div);
@@ -943,6 +955,75 @@ NODES.forEach(nd=>{
 
 setTimeout(()=>NODES.forEach((nd,i)=>gsap.to(LEL[nd.id].el,{opacity:1,duration:.5,delay:i*.07})),700);
 setTimeout(()=>{if(LEL['LOÏC DENYS'])gsap.to(LEL['LOÏC DENYS'].bub,{scale:1.12,duration:.85,yoyo:true,repeat:-1,ease:'power1.inOut'});},2500);
+
+// ═══════════════════════════════════════════
+// DRAG NŒUDS — long-press 300ms + unproject + GSAP elastic + touch + localStorage
+// ═══════════════════════════════════════════
+function saveNodePositions(){
+  try{const out={};NODES.filter(n=>!n.center).forEach(n=>{const p=ND3D[n.id];out[n.id]=[p[0],p[1],p[2]];});
+    localStorage.setItem('cerveau_nodes',JSON.stringify(out));}catch(_){}
+}
+function nodeScreenDepth(id){const w=nPos[id].clone();gg.localToWorld(w);w.project(cam);return w.z;}
+function startGrab(nd,clientX,clientY){
+  if(nd.center)return;                 // le hub central reste ancré
+  grabbedId=nd.id;grabDepth=nodeScreenDepth(nd.id);lockedFloat.add(nd.id);
+  document.body.style.cursor='grabbing';
+  const b=LEL[nd.id].bub;
+  gsap.killTweensOf(b);gsap.to(b,{scale:1.5,duration:.18,ease:'back.out(2)'});
+  b.style.boxShadow='0 0 22px rgba(74,158,186,.8),0 0 46px rgba(74,158,186,.32)';
+  dragPrev=dragLast=null;dragTo(clientX,clientY);
+}
+function dragTo(clientX,clientY){
+  if(!grabbedId)return;
+  const v=new THREE.Vector3((clientX/W)*2-1,-(clientY/H)*2+1,grabDepth);
+  v.unproject(cam);          // → monde, à la profondeur figée du nœud
+  gg.worldToLocal(v);        // → espace local du groupe cerveau
+  const a=ND3D[grabbedId];a[0]=v.x;a[1]=v.y;a[2]=v.z;
+  nPos[grabbedId].set(v.x,v.y,v.z);
+  dragPrev=dragLast;dragLast=[v.x,v.y,v.z];
+}
+function releaseGrab(){
+  const id=grabbedId;grabbedId=null;document.body.style.cursor='';
+  const b=LEL[id].bub;
+  gsap.to(b,{scale:1,duration:.5,ease:'elastic.out(1,.45)',onComplete:()=>{b.style.transform='';}});
+  b.style.boxShadow='0 0 7px rgba(225,225,225,.25),0 0 14px rgba(225,225,225,.08)';
+  const drop=[ND3D[id][0],ND3D[id][1],ND3D[id][2]];
+  // "throw" élastique : petit dépassement selon la vélocité de relâché
+  let vx=0,vy=0,vz=0;
+  if(dragPrev&&dragLast){const k=1.4,M=0.55;
+    vx=(dragLast[0]-dragPrev[0])*k;vy=(dragLast[1]-dragPrev[1])*k;vz=(dragLast[2]-dragPrev[2])*k;
+    const m=Math.hypot(vx,vy,vz);if(m>M){const s=M/m;vx*=s;vy*=s;vz*=s;}}
+  const proxy={x:drop[0]+vx,y:drop[1]+vy,z:drop[2]+vz};
+  ND3D[id]=[proxy.x,proxy.y,proxy.z];nPos[id].set(proxy.x,proxy.y,proxy.z);
+  gsap.to(proxy,{x:drop[0],y:drop[1],z:drop[2],duration:1.1,ease:'elastic.out(1,.5)',
+    onUpdate:()=>{ND3D[id][0]=proxy.x;ND3D[id][1]=proxy.y;ND3D[id][2]=proxy.z;nPos[id].set(proxy.x,proxy.y,proxy.z);},
+    onComplete:()=>{lockedFloat.delete(id);saveNodePositions();}});
+  saveNodePositions();
+}
+function onNodeDown(ev,nd){
+  if(appState!=='graph'||isTr)return;
+  ev.stopPropagation();
+  try{ev.currentTarget.setPointerCapture(ev.pointerId);}catch(_){}
+  pressInfo={id:nd.id,x0:ev.clientX,y0:ev.clientY,t0:performance.now(),moved:0,lastX:ev.clientX,lastY:ev.clientY};
+  clearTimeout(grabTimer);
+  if(!nd.center)grabTimer=setTimeout(()=>{if(pressInfo&&pressInfo.id===nd.id)startGrab(nd,pressInfo.lastX,pressInfo.lastY);},300);
+}
+function onNodeMove(ev,nd){
+  if(!pressInfo||pressInfo.id!==nd.id)return;
+  pressInfo.lastX=ev.clientX;pressInfo.lastY=ev.clientY;
+  pressInfo.moved=Math.hypot(ev.clientX-pressInfo.x0,ev.clientY-pressInfo.y0);
+  if(grabbedId===nd.id){ev.preventDefault();dragTo(ev.clientX,ev.clientY);}
+}
+function onNodeUp(ev,nd){
+  clearTimeout(grabTimer);
+  if(grabbedId===nd.id){releaseGrab();}
+  else if(pressInfo&&pressInfo.id===nd.id){
+    const quick=(performance.now()-pressInfo.t0)<300,still=pressInfo.moved<8;
+    if(quick&&still&&appState==='graph'&&!isTr)goToPage(nd.id); // clic simple → page (inchangé)
+  }
+  try{ev.currentTarget.releasePointerCapture(ev.pointerId);}catch(_){}
+  pressInfo=null;
+}
 
 // ═══════════════════════════════════════════
 // CONTROLS
@@ -1047,13 +1128,13 @@ function animate(ts){
   requestAnimationFrame(animate);
   const t=ts/1000,dt=t-lastT;lastT=t;
 
-  // Controls damping
-  if(!isDrag)autoRY+=.0008;
+  // Controls damping (auto-rotation figée pendant la saisie d'un nœud)
+  if(!isDrag&&!grabbedId)autoRY+=.0008;
   cRotY=lp(cRotY,tRotY+autoRY,.06);cRotX=lp(cRotX,tRotX,.06);cCamZ=lp(cCamZ,tCamZ,.08);
   gg.rotation.y=cRotY;gg.rotation.x=cRotX;cam.position.z=cCamZ;
 
   // Parallaxe douce : léger offset caméra, le fond respire derrière le cerveau
-  if(appState==='graph'&&!isTr){
+  if(appState==='graph'&&!isTr&&!grabbedId){
     pmX=lp(pmX,pmTX*.9,.045);pmY=lp(pmY,-pmTY*.9,.045);
     cam.position.x=pmX;cam.position.y=pmY;cam.lookAt(0,0,0);
   }
@@ -1064,10 +1145,12 @@ function animate(ts){
   centerGlow.material.opacity=.12+.05*(.5+.5*Math.sin(t*.5));
   veil.material.opacity=.28+.08*Math.sin(t*.32+1);
 
-  // Node orbital float
+  // Node orbital float (figé pour le nœud saisi / en cours de settle élastique)
   NODES.forEach(nd=>{
     if(nd.center)return;
-    const f=fp[nd.id],b=ND3D[nd.id];
+    const b=ND3D[nd.id];
+    if(lockedFloat.has(nd.id)){nPos[nd.id].set(b[0],b[1],b[2]);return;}
+    const f=fp[nd.id];
     nPos[nd.id].set(b[0]+f.ax*Math.cos(t*f.sp+f.px),b[1]+f.ay*Math.sin(t*f.sp*.7+f.py),b[2]+f.az*Math.sin(t*f.sp*.5+f.pz));
   });
 
