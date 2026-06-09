@@ -865,15 +865,31 @@ const fp={};
 NODES.filter(n=>!n.center).forEach(nd=>{fp[nd.id]={ax:.12+Math.random()*.1,ay:.09+Math.random()*.09,az:.1+Math.random()*.08,sp:.18+Math.random()*.14,px:Math.random()*Math.PI*2,py:Math.random()*Math.PI*2,pz:Math.random()*Math.PI*2};});
 
 const EC=EDGES.length;
-const eBuf=new Float32Array(EC*6),eGeo=new THREE.BufferGeometry();
+const CENTER_ID='LOÏC DENYS';
+// Niveau de highlight par arête : 0 = estompé, 0.5 = normal, 1 = vif (lerp progressif)
+const eHi=new Float32Array(EC).fill(0.5);
+const eBuf=new Float32Array(EC*6),eCol=new Float32Array(EC*6),eGeo=new THREE.BufferGeometry();
 eGeo.setAttribute('position',new THREE.BufferAttribute(eBuf,3).setUsage(THREE.DynamicDrawUsage));
-const eMat=new THREE.LineBasicMaterial({color:0x4a9eba,transparent:true,opacity:.35});
+eGeo.setAttribute('color',new THREE.BufferAttribute(eCol,3).setUsage(THREE.DynamicDrawUsage));
+const eMat=new THREE.LineBasicMaterial({vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
 gg.add(new THREE.LineSegments(eGeo,eMat));
 
-const cBuf=new Float32Array(EC*6),cGeo=new THREE.BufferGeometry();
+const cBuf=new Float32Array(EC*6),cCol=new Float32Array(EC*6),cGeo=new THREE.BufferGeometry();
 cGeo.setAttribute('position',new THREE.BufferAttribute(cBuf,3).setUsage(THREE.DynamicDrawUsage));
-const cMat=new THREE.LineBasicMaterial({color:0x4a9eba,transparent:true,opacity:.35});
+cGeo.setAttribute('color',new THREE.BufferAttribute(cCol,3).setUsage(THREE.DynamicDrawUsage));
+const cMat=new THREE.LineBasicMaterial({vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
 gg.add(new THREE.LineSegments(cGeo,cMat));
+
+const _ec=[0,0,0]; // scratch couleur arête (alloué une fois)
+// Palette arêtes : estompé(D) → normal bleu neural(N) → vif bleu/violet(B)
+function edgeColor(h,pulse,out){
+  const D=[0.015,0.022,0.035],N=[0.10,0.21,0.25],B=[0.42,0.40,1.0];
+  let r,g,b;
+  if(h<0.5){const u=h/0.5;r=D[0]+(N[0]-D[0])*u;g=D[1]+(N[1]-D[1])*u;b=D[2]+(N[2]-D[2])*u;}
+  else{const u=(h-0.5)/0.5;r=N[0]+(B[0]-N[0])*u;g=N[1]+(B[1]-N[1])*u;b=N[2]+(B[2]-N[2])*u;}
+  const f=0.8+0.4*pulse; // pulsation neuronale douce
+  out[0]=r*f;out[1]=g*f;out[2]=b*f;
+}
 
 // ═══════════════════════════════════════════
 // NEURAL IMPULSES
@@ -919,7 +935,7 @@ const lov=document.getElementById('label-overlay');
 const LEL={};
 
 // — État du drag de nœuds (Fix 2)
-let grabbedId=null,grabDepth=0,grabTimer=null,pressInfo=null,dragPrev=null,dragLast=null;
+let grabbedId=null,grabDepth=0,grabTimer=null,pressInfo=null,dragPrev=null,dragLast=null,hoverNode=null;
 const lockedFloat=new Set();
 
 NODES.forEach(nd=>{
@@ -944,10 +960,8 @@ NODES.forEach(nd=>{
   div.addEventListener('pointermove',ev=>onNodeMove(ev,nd));
   div.addEventListener('pointerup',ev=>onNodeUp(ev,nd));
   div.addEventListener('pointercancel',ev=>onNodeUp(ev,nd));
-  if(!nd.center){
-    div.addEventListener('mouseenter',()=>{if(!grabbedId)bub.style.boxShadow='0 0 16px rgba(232,232,232,.55),0 0 32px rgba(232,232,232,.2)';});
-    div.addEventListener('mouseleave',()=>{if(grabbedId!==nd.id)bub.style.boxShadow='0 0 7px rgba(225,225,225,.25),0 0 14px rgba(225,225,225,.08)';});
-  }
+  div.addEventListener('mouseenter',()=>{if(!grabbedId)applyHoverHighlight(nd.id);});
+  div.addEventListener('mouseleave',()=>{if(!grabbedId)applyHoverHighlight(null);});
   div.style.opacity='0';
   lov.appendChild(div);
   LEL[nd.id]={el:div,bub};
@@ -964,8 +978,25 @@ function saveNodePositions(){
     localStorage.setItem('cerveau_nodes',JSON.stringify(out));}catch(_){}
 }
 function nodeScreenDepth(id){const w=nPos[id].clone();gg.localToWorld(w);w.project(cam);return w.z;}
+// Highlight type Obsidian : illumine le nœud survolé + ses voisins, estompe le reste
+function applyHoverHighlight(hoverId){
+  hoverNode=hoverId;
+  let conn=null;
+  if(hoverId){conn=new Set([hoverId]);EDGES.forEach(([a,b])=>{if(a===hoverId)conn.add(b);else if(b===hoverId)conn.add(a);});}
+  NODES.forEach(nd=>{
+    const o=LEL[nd.id];if(!o)return;
+    const lit=!hoverId||conn.has(nd.id);
+    o.el.style.opacity=lit?'1':'0.16';
+    if(!nd.center){
+      o.bub.style.boxShadow=(hoverId&&conn.has(nd.id))
+        ? '0 0 16px rgba(125,135,255,.78),0 0 34px rgba(125,135,255,.34)'
+        : '0 0 7px rgba(225,225,225,.25),0 0 14px rgba(225,225,225,.08)';
+    }
+  });
+}
 function startGrab(nd,clientX,clientY){
   if(nd.center)return;                 // le hub central reste ancré
+  applyHoverHighlight(null);           // pas de highlight pendant la saisie
   grabbedId=nd.id;grabDepth=nodeScreenDepth(nd.id);lockedFloat.add(nd.id);
   document.body.style.cursor='grabbing';
   const b=LEL[nd.id].bub;
@@ -1145,25 +1176,35 @@ function animate(ts){
   centerGlow.material.opacity=.12+.05*(.5+.5*Math.sin(t*.5));
   veil.material.opacity=.28+.08*Math.sin(t*.32+1);
 
-  // Node orbital float (figé pour le nœud saisi / en cours de settle élastique)
+  // Node orbital float — pendant un drag, SEUL le nœud saisi bouge, les autres gelés
   NODES.forEach(nd=>{
     if(nd.center)return;
+    if(grabbedId){
+      if(nd.id===grabbedId){const b=ND3D[nd.id];nPos[nd.id].set(b[0],b[1],b[2]);}
+      return; // autres nœuds : position courante gelée
+    }
     const b=ND3D[nd.id];
     if(lockedFloat.has(nd.id)){nPos[nd.id].set(b[0],b[1],b[2]);return;}
     const f=fp[nd.id];
     nPos[nd.id].set(b[0]+f.ax*Math.cos(t*f.sp+f.px),b[1]+f.ay*Math.sin(t*f.sp*.7+f.py),b[2]+f.az*Math.sin(t*f.sp*.5+f.pz));
   });
 
-  // Edges
+  // Edges : positions + couleur par arête (highlight Obsidian, lerp progressif)
+  const hov=grabbedId?null:hoverNode;
+  const pulseE=0.5+0.5*Math.sin(t*.7),pulseC=0.5+0.5*Math.sin(t*.9+1);
   EDGES.forEach(([a,b],i)=>{
-    const pA=nPos[a],pB=nPos[b],isC=(a==='LOÏC DENYS'||b==='LOÏC DENYS');
-    const buf=isC?cBuf:eBuf;
+    const pA=nPos[a],pB=nPos[b],isC=(a===CENTER_ID||b===CENTER_ID);
+    const buf=isC?cBuf:eBuf,col=isC?cCol:eCol;
     buf[i*6]=pA.x;buf[i*6+1]=pA.y;buf[i*6+2]=pA.z;
     buf[i*6+3]=pB.x;buf[i*6+4]=pB.y;buf[i*6+5]=pB.z;
+    let tgt; if(!hov)tgt=0.5; else if(a===hov||b===hov)tgt=1.0; else tgt=0.0;
+    eHi[i]=lp(eHi[i],tgt,0.12);
+    edgeColor(eHi[i],isC?pulseC:pulseE,_ec);
+    col[i*6]=_ec[0];col[i*6+1]=_ec[1];col[i*6+2]=_ec[2];
+    col[i*6+3]=_ec[0];col[i*6+4]=_ec[1];col[i*6+5]=_ec[2];
   });
   eGeo.attributes.position.needsUpdate=true;cGeo.attributes.position.needsUpdate=true;
-  eMat.opacity=.2+.25*(0.5+0.5*Math.sin(t*.7));   // bleu neural, pulse .2 → .45
-  cMat.opacity=.2+.25*(0.5+0.5*Math.sin(t*.9+1)); // hub, phase décalée
+  eGeo.attributes.color.needsUpdate=true;cGeo.attributes.color.needsUpdate=true;
 
   // Neural impulses — sinusoidal, eased, multi-per-edge
   EDGES.forEach(([a,b],ei)=>{
