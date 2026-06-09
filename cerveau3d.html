@@ -755,6 +755,78 @@ const gg=new THREE.Group();
 gg.add(brainMesh);
 scene.add(gg);
 
+// ═══════════════════════════════════════════
+// AMBIANCE COSMIQUE — nebula + étoiles + brume centrale
+// (zéro post-processing : tout en additif léger, mobile-safe)
+// ═══════════════════════════════════════════
+function radialTex(stops,sz){
+  sz=sz||256;const c=document.createElement('canvas');c.width=c.height=sz;
+  const x=c.getContext('2d'),g=x.createRadialGradient(sz/2,sz/2,0,sz/2,sz/2,sz/2);
+  stops.forEach(s=>g.addColorStop(s[0],s[1]));
+  x.fillStyle=g;x.fillRect(0,0,sz,sz);return new THREE.CanvasTexture(c);
+}
+
+// — Nebula profonde : plan d'arrière-plan, bleu nuit / violet très sombre
+const nebTex=radialTex([
+  [0,'rgba(24,28,54,0.85)'],
+  [0.34,'rgba(20,18,44,0.5)'],
+  [0.62,'rgba(11,11,24,0.2)'],
+  [1,'rgba(5,5,7,0)']
+]);
+const nebula=new THREE.Mesh(
+  new THREE.PlaneGeometry(230,155),
+  new THREE.MeshBasicMaterial({map:nebTex,transparent:true,depthWrite:false,opacity:.9})
+);
+nebula.position.set(0,2,-44);nebula.renderOrder=-20;scene.add(nebula);
+
+// — Voile violet décalé : asymétrie douce, additif très faible
+const veilTex=radialTex([
+  [0,'rgba(58,40,88,0.5)'],
+  [0.5,'rgba(38,28,66,0.16)'],
+  [1,'rgba(0,0,0,0)']
+]);
+const veil=new THREE.Mesh(
+  new THREE.PlaneGeometry(130,130),
+  new THREE.MeshBasicMaterial({map:veilTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.32})
+);
+veil.position.set(-16,-7,-32);veil.renderOrder=-19;scene.add(veil);
+
+// — Brume lumineuse centrale qui respire : bloom doux derrière le cerveau
+const glowTex=radialTex([
+  [0,'rgba(178,198,234,0.8)'],
+  [0.26,'rgba(118,148,208,0.32)'],
+  [0.56,'rgba(66,86,148,0.11)'],
+  [1,'rgba(0,0,0,0)']
+]);
+const centerGlow=new THREE.Mesh(
+  new THREE.PlaneGeometry(28,28),
+  new THREE.MeshBasicMaterial({map:glowTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.15})
+);
+centerGlow.renderOrder=-10;scene.add(centerGlow);
+
+// — Champ d'étoiles lointaines : BufferGeometry séparé, quasi-invisible
+const SN=700;
+const starPos=new Float32Array(SN*3),starSz=new Float32Array(SN);
+for(let i=0;i<SN;i++){
+  const r=24+Math.random()*34,a=Math.random()*Math.PI*2,b=Math.acos(2*Math.random()-1);
+  starPos[i*3]=r*Math.sin(b)*Math.cos(a);
+  starPos[i*3+1]=r*Math.sin(b)*Math.sin(a);
+  starPos[i*3+2]=r*Math.cos(b);
+  starSz[i]=(Math.random()<0.08?0.2:0.065)+Math.random()*0.05;
+}
+const starGeo=new THREE.BufferGeometry();
+starGeo.setAttribute('position',new THREE.BufferAttribute(starPos,3));
+starGeo.setAttribute('size',new THREE.BufferAttribute(starSz,1));
+const starTex=radialTex([[0,'rgba(255,255,255,1)'],[0.4,'rgba(255,255,255,0.5)'],[1,'rgba(0,0,0,0)']],64);
+const starMat=new THREE.ShaderMaterial({
+  uniforms:{uTex:{value:starTex},uTw:{value:.45}},
+  vertexShader:'attribute float size;void main(){vec4 mv=modelViewMatrix*vec4(position,1.0);gl_PointSize=size*(380.0/-mv.z);gl_Position=projectionMatrix*mv;}',
+  fragmentShader:'uniform sampler2D uTex;uniform float uTw;void main(){vec4 t=texture2D(uTex,gl_PointCoord);if(t.a<0.02)discard;gl_FragColor=vec4(vec3(0.84,0.87,0.95),t.a*uTw);}',
+  transparent:true,blending:THREE.AdditiveBlending,depthWrite:false
+});
+const starField=new THREE.Points(starGeo,starMat);
+starField.renderOrder=-15;scene.add(starField);
+
 const nPos={};
 NODES.forEach(nd=>nPos[nd.id]=new THREE.Vector3(...ND3D[nd.id]));
 
@@ -851,6 +923,7 @@ setTimeout(()=>{if(LEL['LOÏC DENYS'])gsap.to(LEL['LOÏC DENYS'].bub,{scale:1.12
 let isDrag=false,prevMX=0,prevMY=0;
 let tRotY=0,tRotX=0,cRotY=0,cRotX=0;
 let tCamZ=12,cCamZ=12,autoRY=0;
+let pmTX=0,pmTY=0,pmX=0,pmY=0; // parallaxe souris (cible / courant)
 
 window.addEventListener('mousedown',e=>{
   if(appState!=='graph')return;
@@ -870,6 +943,11 @@ window.addEventListener('mouseup',()=>{
   isDrag=false;canvas.classList.remove('dragging');
   setTimeout(()=>Object.values(LEL).forEach(o=>o.el.style.pointerEvents='auto'),50);
 });
+// Parallaxe fond : suit la souris même hors drag (gated graph)
+window.addEventListener('mousemove',e=>{
+  if(appState!=='graph'){pmTX=0;pmTY=0;return;}
+  pmTX=(e.clientX/W-.5);pmTY=(e.clientY/H-.5);
+},{passive:true});
 window.addEventListener('wheel',e=>{
   if(appState!=='graph')return;
   tCamZ=Math.max(5,Math.min(20,tCamZ+e.deltaY*.014));
@@ -946,6 +1024,18 @@ function animate(ts){
   if(!isDrag)autoRY+=.0008;
   cRotY=lp(cRotY,tRotY+autoRY,.06);cRotX=lp(cRotX,tRotX,.06);cCamZ=lp(cCamZ,tCamZ,.08);
   gg.rotation.y=cRotY;gg.rotation.x=cRotX;cam.position.z=cCamZ;
+
+  // Parallaxe douce : léger offset caméra, le fond respire derrière le cerveau
+  if(appState==='graph'&&!isTr){
+    pmX=lp(pmX,pmTX*.9,.045);pmY=lp(pmY,-pmTY*.9,.045);
+    cam.position.x=pmX;cam.position.y=pmY;cam.lookAt(0,0,0);
+  }
+  // Vie de l'ambiance cosmique
+  starField.rotation.y+=.0004;starField.rotation.x+=.0001;
+  starMat.uniforms.uTw.value=.42+.12*Math.sin(t*.6);
+  centerGlow.scale.setScalar(1+.09*Math.sin(t*.5));
+  centerGlow.material.opacity=.12+.05*(.5+.5*Math.sin(t*.5));
+  veil.material.opacity=.28+.08*Math.sin(t*.32+1);
 
   // Node orbital float
   NODES.forEach(nd=>{
