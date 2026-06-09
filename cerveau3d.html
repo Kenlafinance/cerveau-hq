@@ -863,12 +863,12 @@ NODES.filter(n=>!n.center).forEach(nd=>{fp[nd.id]={ax:.12+Math.random()*.1,ay:.0
 const EC=EDGES.length;
 const eBuf=new Float32Array(EC*6),eGeo=new THREE.BufferGeometry();
 eGeo.setAttribute('position',new THREE.BufferAttribute(eBuf,3).setUsage(THREE.DynamicDrawUsage));
-const eMat=new THREE.LineBasicMaterial({color:0x181818,transparent:true,opacity:.7});
+const eMat=new THREE.LineBasicMaterial({color:0x4a9eba,transparent:true,opacity:.35});
 gg.add(new THREE.LineSegments(eGeo,eMat));
 
 const cBuf=new Float32Array(EC*6),cGeo=new THREE.BufferGeometry();
 cGeo.setAttribute('position',new THREE.BufferAttribute(cBuf,3).setUsage(THREE.DynamicDrawUsage));
-const cMat=new THREE.LineBasicMaterial({color:0x262626,transparent:true,opacity:.55});
+const cMat=new THREE.LineBasicMaterial({color:0x4a9eba,transparent:true,opacity:.35});
 gg.add(new THREE.LineSegments(cGeo,cMat));
 
 // ═══════════════════════════════════════════
@@ -1079,8 +1079,8 @@ function animate(ts){
     buf[i*6+3]=pB.x;buf[i*6+4]=pB.y;buf[i*6+5]=pB.z;
   });
   eGeo.attributes.position.needsUpdate=true;cGeo.attributes.position.needsUpdate=true;
-  eMat.opacity=.06+.1*(0.5+0.5*Math.sin(t*.7));
-  cMat.opacity=.05+.08*(0.5+0.5*Math.sin(t*.9+1));
+  eMat.opacity=.2+.25*(0.5+0.5*Math.sin(t*.7));   // bleu neural, pulse .2 → .45
+  cMat.opacity=.2+.25*(0.5+0.5*Math.sin(t*.9+1)); // hub, phase décalée
 
   // Neural impulses — sinusoidal, eased, multi-per-edge
   EDGES.forEach(([a,b],ei)=>{
