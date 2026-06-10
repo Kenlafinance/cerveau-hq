@@ -863,19 +863,21 @@ starField.renderOrder=-15;scene.add(starField);
 // Orbites elliptiques inclinées + paquets-comètes, 100% vertex shader (1 uniform)
 // ═══════════════════════════════════════════
 const IS_MOBILE=matchMedia('(pointer:coarse)').matches||'ontouchstart' in window;
-const SW_ORBITS=IS_MOBILE?12:22, SW_LEADERS=IS_MOBILE?250:700, SW_TRAIL=IS_MOBILE?5:7;
+const SW_ORBITS=IS_MOBILE?12:22, SW_LEADERS=IS_MOBILE?250:910, SW_TRAIL=IS_MOBILE?5:7; // +30% desktop
 const SW_RINGS=IS_MOBILE?6:10, SWN=SW_LEADERS*SW_TRAIL;
 // — Réglages contraste couche 3 (constantes isolées, ajustables +/-) —
-const SW_ALPHA=1.0;                       // luminosité points (était 0.7 → +50%, plafond alpha)
-const SW_LEADER_SIZE=0.22;                // taille leader (était 0.168 → +30%)
+const SW_ALPHA=1.0;                       // luminosité points (plafond alpha)
+const SW_LEADER_SIZE=0.33;                // taille leader ×1.5 (était 0.22)
 const SW_TAIL_SIZE=0.06;                  // taille bout de traînée (inchangé)
-const SW_TRAIL_FADE=0.75;                 // décroissance traînée → alpha mini effectif ~0.36 (≥0.25 demandé)
-const SW_WHITE=[0.95,0.95,0.98];          // blanc — niveau étoiles du fond
-const SW_GOLD=[0.85,0.72,0.42];           // or lumineux (inchangé)
-const SW_RING_OPACITY=0.45;               // anneaux ×1.8 (était 0.25)
-const SW_RING_COLOR=0x6c9cb0;             // bleu neural désaturé (inchangé)
-const SW_BOOST=1.6;                       // boost couleur additif (+60% — alpha déjà au plafond)
+const SW_TRAIL_FADE=0.75;                 // décroissance traînée → alpha mini effectif ~0.36
+const SW_WHITE=[1.0,1.0,1.0];             // blanc pur lumineux (plus de gris)
+const SW_GOLD=[1.0,0.85,0.45];            // or franc lumineux
+const SW_RING_OPACITY=0.7;                // anneaux (était 0.45)
+const SW_RING_COLOR=0x5fb8d9;             // bleu saturé (était 0x6c9cb0)
+const SW_BOOST=1.6;                       // boost couleur additif
 const SW_RING_THICK=1.012;                // 2e LineLoop décalé : épaisseur simulée (linewidth ignoré en WebGL)
+const SW_HALO_SIZE=0.55;                  // taille du halo des leaders (texture brume douce)
+const SW_HALO_ALPHA=0.5;                  // intensité du halo
 
 // Solidaire du cerveau : dans gg, le drag-rotation pivote tout le système solaire.
 // La dérive lente propre (animate) s'ajoute par-dessus, en relatif.
@@ -949,6 +951,55 @@ const swMat=new THREE.ShaderMaterial({
   transparent:true,blending:THREE.AdditiveBlending,depthWrite:false
 });
 swarmGroup.add(new THREE.Points(swGeo,swMat));
+
+// — Halo des leaders : 2e draw, texture brume douce (technique de la brume cerveau, en mini)
+// C'est ce rayonnement qui donne le rendu "système solaire vivant", pas l'opacité seule.
+const hOrb=new Float32Array(SW_LEADERS*4),hU=new Float32Array(SW_LEADERS*3),hV=new Float32Array(SW_LEADERS*3);
+const hJit=new Float32Array(SW_LEADERS*3),hTint=new Float32Array(SW_LEADERS);
+for(let l=0;l<SW_LEADERS;l++){
+  const i=l*SW_TRAIL; // attributs du leader (k=0) de chaque paquet
+  for(let c=0;c<4;c++)hOrb[l*4+c]=swOrb[i*4+c];
+  for(let c=0;c<3;c++){hU[l*3+c]=swU[i*3+c];hV[l*3+c]=swV[i*3+c];hJit[l*3+c]=swJit[i*3+c];}
+  hTint[l]=swTint[i];
+}
+const haloGeo=new THREE.BufferGeometry();
+haloGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(SW_LEADERS*3),3));
+haloGeo.setAttribute('aOrbit',new THREE.BufferAttribute(hOrb,4));
+haloGeo.setAttribute('aPlaneU',new THREE.BufferAttribute(hU,3));
+haloGeo.setAttribute('aPlaneV',new THREE.BufferAttribute(hV,3));
+haloGeo.setAttribute('aJit',new THREE.BufferAttribute(hJit,3));
+haloGeo.setAttribute('aTint',new THREE.BufferAttribute(hTint,1));
+const haloTex=radialTex([
+  [0,'rgba(255,255,255,0.9)'],
+  [0.25,'rgba(255,255,255,0.45)'],
+  [0.6,'rgba(255,255,255,0.12)'],
+  [1,'rgba(0,0,0,0)']
+],128);
+const haloMat=new THREE.ShaderMaterial({
+  uniforms:{uTex:{value:haloTex},uTime:{value:0}},
+  vertexShader:[
+    'attribute vec4 aOrbit;attribute vec3 aPlaneU;attribute vec3 aPlaneV;',
+    'attribute float aTint;attribute vec3 aJit;',
+    'uniform float uTime;varying float vTint;',
+    'void main(){',
+    '  float ang=aOrbit.w+uTime*aOrbit.z;',
+    '  float r=aOrbit.x*(1.0-aOrbit.y*aOrbit.y)/(1.0+aOrbit.y*cos(ang));',
+    '  vec3 pos=r*(cos(ang)*aPlaneU+sin(ang)*aPlaneV)+aJit;',
+    '  vTint=aTint;',
+    '  vec4 mv=modelViewMatrix*vec4(pos,1.0);',
+    '  gl_PointSize='+SW_HALO_SIZE.toFixed(3)+'*(300.0/-mv.z);',
+    '  gl_Position=projectionMatrix*mv;',
+    '}'].join('\n'),
+  fragmentShader:[
+    'uniform sampler2D uTex;varying float vTint;',
+    'void main(){',
+    '  vec4 t=texture2D(uTex,gl_PointCoord);if(t.a<0.02)discard;',
+    '  vec3 col=mix(vec3('+SW_WHITE.map(v=>v.toFixed(2)).join(',')+'),vec3('+SW_GOLD.map(v=>v.toFixed(2)).join(',')+'),vTint);',
+    '  gl_FragColor=vec4(col,t.a*'+SW_HALO_ALPHA.toFixed(2)+');',
+    '}'].join('\n'),
+  transparent:true,blending:THREE.AdditiveBlending,depthWrite:false
+});
+swarmGroup.add(new THREE.Points(haloGeo,haloMat));
 
 // Anneaux d'orbites : trajectoires lisibles, très subtils
 const ringMat=new THREE.LineBasicMaterial({color:SW_RING_COLOR,transparent:true,opacity:SW_RING_OPACITY,blending:THREE.AdditiveBlending,depthWrite:false});
@@ -1304,8 +1355,8 @@ function animate(ts){
   centerGlow.material.opacity=.12+.05*(.5+.5*Math.sin(t*.5));
   veil.material.opacity=.28+.08*Math.sin(t*.32+1);
   // Couche 3 : swarm orbital — tout est calculé sur GPU, on ne pousse qu'un uniform
-  swMat.uniforms.uTime.value=t;
-  swarmGroup.rotation.y+=.00018;               // dérive lente de l'ensemble du système
+  swMat.uniforms.uTime.value=t;haloMat.uniforms.uTime.value=t;
+  swarmGroup.rotation.y+=.00018;               // dérive lente propre, par-dessus la rotation gg
 
   // Physique du drag : inertie + oscillation + ressort sur les voisins
   floatBlend=lp(floatBlend,grabbedId?0:1,.07); // fondu du flottement (évite le pop à la reprise)
