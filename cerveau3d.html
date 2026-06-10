@@ -865,6 +865,15 @@ starField.renderOrder=-15;scene.add(starField);
 const IS_MOBILE=matchMedia('(pointer:coarse)').matches||'ontouchstart' in window;
 const SW_ORBITS=IS_MOBILE?12:22, SW_LEADERS=IS_MOBILE?250:700, SW_TRAIL=IS_MOBILE?5:7;
 const SW_RINGS=IS_MOBILE?6:10, SWN=SW_LEADERS*SW_TRAIL;
+// — Réglages contraste couche 3 (constantes isolées, ajustables +/-) —
+const SW_ALPHA=0.7;                       // luminosité points (était 0.5 → +40%)
+const SW_LEADER_SIZE=0.168;               // taille leader (était 0.14 → +20%)
+const SW_TAIL_SIZE=0.06;                  // taille bout de traînée (inchangé)
+const SW_TRAIL_FADE=0.75;                 // décroissance traînée (était 0.85 — suiveurs plus visibles)
+const SW_WHITE=[0.90,0.90,0.94];          // blanc cassé (était 0.85)
+const SW_GOLD=[0.85,0.72,0.42];           // or plus lumineux (était 0.72,0.62,0.38)
+const SW_RING_OPACITY=0.12;               // anneaux (était 0.05)
+const SW_RING_COLOR=0x6c9cb0;             // bleu neural désaturé (était blanc-gris)
 
 const swarmGroup=new THREE.Group();
 swarmGroup.renderOrder=-5;scene.add(swarmGroup);
@@ -897,7 +906,7 @@ for(let l=0;l<SW_LEADERS;l++){
     swU[i*3]=ob.u.x;swU[i*3+1]=ob.u.y;swU[i*3+2]=ob.u.z;
     swV[i*3]=ob.v.x;swV[i*3+1]=ob.v.y;swV[i*3+2]=ob.v.z;
     swTr[i*2]=k*0.028;                         // retard angulaire de traînée
-    swTr[i*2+1]=1-(k/SW_TRAIL)*0.85;           // fade taille/alpha le long de la traînée
+    swTr[i*2+1]=1-(k/SW_TRAIL)*SW_TRAIL_FADE;  // fade taille/alpha le long de la traînée
     swTint[i]=tint;
     swJit[i*3]=jx;swJit[i*3+1]=jy;swJit[i*3+2]=jz;
   }
@@ -923,22 +932,22 @@ const swMat=new THREE.ShaderMaterial({
     '  vec3 pos=r*(cos(ang)*aPlaneU+sin(ang)*aPlaneV)+aJit;',
     '  vTint=aTint;vFade=aTrail.y;',
     '  vec4 mv=modelViewMatrix*vec4(pos,1.0);',
-    '  gl_PointSize=(0.06+0.08*aTrail.y)*(300.0/-mv.z);',
+    '  gl_PointSize=('+SW_TAIL_SIZE.toFixed(3)+'+'+(SW_LEADER_SIZE-SW_TAIL_SIZE).toFixed(3)+'*aTrail.y)*(300.0/-mv.z);',
     '  gl_Position=projectionMatrix*mv;',
     '}'].join('\n'),
   fragmentShader:[
     'uniform sampler2D uTex;varying float vTint;varying float vFade;',
     'void main(){',
     '  vec4 t=texture2D(uTex,gl_PointCoord);if(t.a<0.02)discard;',
-    '  vec3 col=mix(vec3(0.85,0.85,0.88),vec3(0.72,0.62,0.38),vTint);', // blanc ↔ or désaturé
-    '  gl_FragColor=vec4(col,t.a*vFade*0.5);',
+    '  vec3 col=mix(vec3('+SW_WHITE.map(v=>v.toFixed(2)).join(',')+'),vec3('+SW_GOLD.map(v=>v.toFixed(2)).join(',')+'),vTint);', // blanc ↔ or
+    '  gl_FragColor=vec4(col,t.a*vFade*'+SW_ALPHA.toFixed(2)+');',
     '}'].join('\n'),
   transparent:true,blending:THREE.AdditiveBlending,depthWrite:false
 });
 swarmGroup.add(new THREE.Points(swGeo,swMat));
 
 // Anneaux d'orbites : trajectoires lisibles, très subtils
-const ringMat=new THREE.LineBasicMaterial({color:0xbfc4d0,transparent:true,opacity:.05,blending:THREE.AdditiveBlending,depthWrite:false});
+const ringMat=new THREE.LineBasicMaterial({color:SW_RING_COLOR,transparent:true,opacity:SW_RING_OPACITY,blending:THREE.AdditiveBlending,depthWrite:false});
 for(let rg=0;rg<SW_RINGS;rg++){
   const ob=ORBITS[Math.floor(rg*SW_ORBITS/SW_RINGS)];
   const SEG=96,rp=new Float32Array(SEG*3);
