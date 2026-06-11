@@ -39,6 +39,29 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
 
 #fade{position:fixed;inset:0;background:#000;z-index:200;opacity:0;pointer-events:none}
 
+/* ═══ PANNEAU RÉGLAGES PHYSIQUE (style Forces / Obsidian) ═══ */
+#phys-toggle{position:fixed;top:104px;right:24px;z-index:40;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:17px;color:rgba(212,175,55,.55);background:rgba(8,8,8,.85);border:1px solid rgba(255,255,255,.1);cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:color .2s,border-color .2s;user-select:none;-webkit-user-select:none}
+#phys-toggle:hover{color:#d4af37;border-color:rgba(212,175,55,.4)}
+#phys-panel{position:fixed;top:156px;right:24px;z-index:40;width:256px;background:rgba(8,8,8,.94);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);padding:12px 16px 14px;display:none;flex-direction:column}
+#phys-panel.open{display:flex}
+.pp-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.pp-title{font-size:9px;letter-spacing:.32em;color:rgba(212,175,55,.7)}
+.pp-close{width:44px;height:44px;margin-right:-14px;display:flex;align-items:center;justify-content:center;font-size:12px;color:rgba(255,255,255,.3);cursor:pointer;transition:color .2s}
+.pp-close:hover{color:#fff}
+.pp-row{padding:2px 0 6px}
+.pp-lab{display:flex;justify-content:space-between;font-size:9px;letter-spacing:.12em;color:rgba(232,232,232,.5)}
+.pp-val{color:#d4af37;font-variant-numeric:tabular-nums}
+.pp-row input[type=range]{width:100%;height:44px;-webkit-appearance:none;appearance:none;background:transparent;touch-action:none;cursor:pointer;margin:0;display:block}
+.pp-row input[type=range]::-webkit-slider-runnable-track{height:2px;background:rgba(255,255,255,.14)}
+.pp-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#d4af37;margin-top:-7px;box-shadow:0 0 8px rgba(212,175,55,.4)}
+.pp-row input[type=range]::-moz-range-track{height:2px;background:rgba(255,255,255,.14)}
+.pp-row input[type=range]::-moz-range-thumb{width:16px;height:16px;border:none;border-radius:50%;background:#d4af37;box-shadow:0 0 8px rgba(212,175,55,.4)}
+.pp-btns{display:flex;gap:8px;margin-top:6px}
+.pp-btn{flex:1;height:44px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.1em;color:rgba(232,232,232,.6);background:none;border:1px solid rgba(255,255,255,.12);cursor:pointer;transition:color .2s,border-color .2s}
+.pp-btn:hover{color:#d4af37;border-color:rgba(212,175,55,.4)}
+.pp-hide{margin-top:10px;text-align:center;font-size:8px;letter-spacing:.22em;color:rgba(232,232,232,.22);cursor:pointer;padding:6px 0;transition:color .2s}
+.pp-hide:hover{color:rgba(232,232,232,.5)}
+
 #sidenav{position:fixed;left:0;top:0;width:192px;height:100%;background:rgba(5,5,5,.97);border-right:1px solid rgba(255,255,255,.06);z-index:110;display:none;flex-direction:column;backdrop-filter:blur(16px);overflow-y:auto}
 #sidenav.visible{display:flex}
 .sn-back{padding:18px 18px 14px;font-size:10px;letter-spacing:.2em;color:rgba(232,232,232,.3);cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);transition:color .2s;flex-shrink:0}
@@ -273,6 +296,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
   <div><span class="val">◆</span> ACTIF</div>
 </div>
 <div id="gstatus">DRAG = ROTATION · SCROLL = ZOOM · CLIC = PROJET</div>
+
+<div id="phys-toggle" title="Réglages physique">⚙️</div>
+<div id="phys-panel">
+  <div class="pp-hdr"><span class="pp-title">PHYSIQUE</span><span class="pp-close" id="pp-close">✕</span></div>
+  <div id="pp-body"></div>
+  <div class="pp-btns"><button class="pp-btn" id="pp-reset">RESET DÉFAUTS</button><button class="pp-btn" id="pp-copy">📋 COPIER</button></div>
+  <div class="pp-hide" id="pp-hide">MASQUER COMPLÈTEMENT</div>
+</div>
 
 <div id="sidenav">
   <div class="sn-back" onclick="goToGraph()">← CERVEAU</div>
@@ -607,14 +638,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
 'use strict';
 
 // ═══════════════════════════════════════════
-// PHYSIQUE NŒUDS — réglage rapide (type d3-force / Obsidian)
+// PHYSIQUE NŒUDS — réglable en LIVE via le panneau ⚙️ (persisté en localStorage)
 // ═══════════════════════════════════════════
-const PHYS_STIFFNESS=0.02;   // ressort de rappel vers la position de repos (cible 0.01–0.03)
-const PHYS_LINK_K=0.015;     // raideur des liens entre nœuds connectés
-const PHYS_DAMPING=0.91;     // friction : velocity *= DAMPING chaque pas (0.90–0.92, jamais <0.85)
-const PHYS_REPULSION=0.012;  // répulsion inverse-carré entre nœuds proches (faible : glisse, pas de saut)
-const PHYS_REPUL_RADIUS=1.6; // rayon d'influence répulsion (unités monde, ~3-4x rayon nœud)
-const PHYS_DRAG_K=0.14;      // ressort FORT nœud→pointeur pendant le drag (lag organique, pas du 1:1)
+const PHYS_DEFAULTS={
+  STIFFNESS:0.014,  // ressort de rappel vers la position de repos
+  LINK_K:0.012,     // raideur des liens entre nœuds connectés
+  DAMPING:0.93,     // friction : velocity *= DAMPING chaque pas (jamais <0.85)
+  REPULSION:0.012,  // répulsion inverse-carré entre nœuds proches
+  DRAG_K:0.14       // ressort FORT nœud→pointeur pendant le drag
+};
+const PHYS={...PHYS_DEFAULTS};
+// Restaure les derniers réglages du panneau
+try{const s=JSON.parse(localStorage.getItem('cerveau_phys')||'null');
+  if(s)Object.keys(PHYS_DEFAULTS).forEach(k=>{if(typeof s[k]==='number'&&isFinite(s[k]))PHYS[k]=s[k];});
+}catch(_){}
+const PHYS_REPUL_RADIUS=1.6; // rayon d'influence répulsion (unités monde)
 const PHYS_DT=1/60;          // pas de simulation fixe
 
 // ═══════════════════════════════════════════
@@ -692,16 +730,16 @@ function physStep(){
   PHYS_IDS.forEach(id=>{
     if(id===grabbedId)return;
     const ph=PH[id],h=ND3D[id];
-    ph.v[0]+=(h[0]-ph.p[0])*PHYS_STIFFNESS;
-    ph.v[1]+=(h[1]-ph.p[1])*PHYS_STIFFNESS;
-    ph.v[2]+=(h[2]-ph.p[2])*PHYS_STIFFNESS;
+    ph.v[0]+=(h[0]-ph.p[0])*PHYS.STIFFNESS;
+    ph.v[1]+=(h[1]-ph.p[1])*PHYS.STIFFNESS;
+    ph.v[2]+=(h[2]-ph.p[2])*PHYS.STIFFNESS;
   });
   // 2. Ressorts des liens (force ∝ écart à la longueur au repos)
   EDGES.forEach(([a,b],i)=>{
     const A=PH[a],B=PH[b];
     const pa=A?A.p:ND3D[a],pb=B?B.p:ND3D[b];   // centre = masse infinie, immobile
     let dx=pb[0]-pa[0],dy=pb[1]-pa[1],dz=pb[2]-pa[2];
-    const d=Math.hypot(dx,dy,dz)||1e-6,s=(d-REST[i])/d*PHYS_LINK_K;
+    const d=Math.hypot(dx,dy,dz)||1e-6,s=(d-REST[i])/d*PHYS.LINK_K;
     dx*=s;dy*=s;dz*=s;
     if(A&&a!==grabbedId){A.v[0]+=dx;A.v[1]+=dy;A.v[2]+=dz;}
     if(B&&b!==grabbedId){B.v[0]-=dx;B.v[1]-=dy;B.v[2]-=dz;}
@@ -713,7 +751,7 @@ function physStep(){
     let dx=B.p[0]-A.p[0],dy=B.p[1]-A.p[1],dz=B.p[2]-A.p[2];
     const d2=dx*dx+dy*dy+dz*dz;
     if(d2>RR||d2<1e-6)continue;
-    const d=Math.sqrt(d2),fr=PHYS_REPULSION/d2;
+    const d=Math.sqrt(d2),fr=PHYS.REPULSION/d2;
     dx=dx/d*fr;dy=dy/d*fr;dz=dz/d*fr;
     if(PHYS_IDS[i]!==grabbedId){A.v[0]-=dx;A.v[1]-=dy;A.v[2]-=dz;}
     if(PHYS_IDS[j]!==grabbedId){B.v[0]+=dx;B.v[1]+=dy;B.v[2]+=dz;}
@@ -721,14 +759,14 @@ function physStep(){
   // 4. Drag : ressort FORT vers le pointeur — jamais position = pointeur
   if(grabbedId&&dragTargetPos){
     const ph=PH[grabbedId];
-    ph.v[0]+=(dragTargetPos[0]-ph.p[0])*PHYS_DRAG_K;
-    ph.v[1]+=(dragTargetPos[1]-ph.p[1])*PHYS_DRAG_K;
-    ph.v[2]+=(dragTargetPos[2]-ph.p[2])*PHYS_DRAG_K;
+    ph.v[0]+=(dragTargetPos[0]-ph.p[0])*PHYS.DRAG_K;
+    ph.v[1]+=(dragTargetPos[1]-ph.p[1])*PHYS.DRAG_K;
+    ph.v[2]+=(dragTargetPos[2]-ph.p[2])*PHYS.DRAG_K;
   }
   // 5. Intégration semi-implicite : friction sur la VÉLOCITÉ, puis position += vélocité
   PHYS_IDS.forEach(id=>{
     const ph=PH[id];
-    ph.v[0]*=PHYS_DAMPING;ph.v[1]*=PHYS_DAMPING;ph.v[2]*=PHYS_DAMPING;
+    ph.v[0]*=PHYS.DAMPING;ph.v[1]*=PHYS.DAMPING;ph.v[2]*=PHYS.DAMPING;
     ph.p[0]+=ph.v[0];ph.p[1]+=ph.v[1];ph.p[2]+=ph.v[2];
   });
 }
@@ -1617,6 +1655,54 @@ function startAtlasClock(){clearInterval(aCI);const u=()=>{const now=new Date(),
 
 function toggleChk(el){el.classList.toggle('checked');}
 window.goToGraph=goToGraph;window.goToPage=goToPage;window.toggleChk=toggleChk;
+
+// ═══════════════════════════════════════════
+// PANNEAU RÉGLAGES PHYSIQUE — sliders temps réel (style Forces / Obsidian)
+// ═══════════════════════════════════════════
+(function(){
+  // [clé PHYS, label, min, max, step]
+  const SLIDERS=[
+    ['REPULSION','RÉPULSION',0,0.06,0.001],        // 0 → 5× la valeur défaut
+    ['STIFFNESS','RESSORT RAPPEL',0.005,0.06,0.001],
+    ['LINK_K','RESSORT LIENS',0.005,0.05,0.001],
+    ['DAMPING','FRICTION',0.85,0.98,0.002],
+    ['DRAG_K','FORCE DRAG',0.05,0.30,0.005],
+  ];
+  const toggle=document.getElementById('phys-toggle'),panel=document.getElementById('phys-panel');
+  const body=document.getElementById('pp-body'),inputs={};
+  SLIDERS.forEach(([k,label,min,max,step])=>{
+    const row=document.createElement('div');row.className='pp-row';
+    const lab=document.createElement('div');lab.className='pp-lab';
+    lab.innerHTML='<span>'+label+'</span><span class="pp-val" id="ppv-'+k+'">'+PHYS[k].toFixed(3)+'</span>';
+    const inp=document.createElement('input');
+    inp.type='range';inp.min=min;inp.max=max;inp.step=step;inp.value=PHYS[k];
+    inp.addEventListener('input',()=>{
+      PHYS[k]=parseFloat(inp.value);                 // effet immédiat : physStep lit PHYS chaque pas
+      document.getElementById('ppv-'+k).textContent=PHYS[k].toFixed(3);
+      savePhys();
+    });
+    row.appendChild(lab);row.appendChild(inp);body.appendChild(row);inputs[k]=inp;
+  });
+  function savePhys(){try{localStorage.setItem('cerveau_phys',JSON.stringify(PHYS));}catch(_){}}
+  function refresh(){SLIDERS.forEach(([k])=>{inputs[k].value=PHYS[k];document.getElementById('ppv-'+k).textContent=PHYS[k].toFixed(3);});}
+  toggle.addEventListener('click',()=>panel.classList.toggle('open'));
+  document.getElementById('pp-close').addEventListener('click',()=>panel.classList.remove('open'));
+  document.getElementById('pp-reset').addEventListener('click',()=>{
+    Object.assign(PHYS,PHYS_DEFAULTS);refresh();
+    try{localStorage.removeItem('cerveau_phys');}catch(_){}
+  });
+  document.getElementById('pp-copy').addEventListener('click',function(){
+    const txt='const PHYS_DEFAULTS={STIFFNESS:'+PHYS.STIFFNESS+',LINK_K:'+PHYS.LINK_K+',DAMPING:'+PHYS.DAMPING+',REPULSION:'+PHYS.REPULSION+',DRAG_K:'+PHYS.DRAG_K+'};';
+    const btn=this,ok=()=>{btn.textContent='✓ COPIÉ';setTimeout(()=>{btn.textContent='📋 COPIER';},1200);};
+    const fallback=()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand('copy');ok();}catch(_){}ta.remove();};
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(ok,fallback);
+    else fallback();
+  });
+  document.getElementById('pp-hide').addEventListener('click',()=>{panel.style.display='none';toggle.style.display='none';}); // jusqu'au prochain reload
+  // Aucun geste ne fuit vers le canvas (rotation / zoom / preventDefault global tactile)
+  [toggle,panel].forEach(el=>['mousedown','touchstart','touchmove','wheel','pointerdown'].forEach(ev=>
+    el.addEventListener(ev,e=>e.stopPropagation(),{passive:false})));
+})();
 
 })();
 </script>
